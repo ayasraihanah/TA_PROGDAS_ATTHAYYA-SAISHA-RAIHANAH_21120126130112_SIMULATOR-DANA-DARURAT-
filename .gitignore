@@ -1,0 +1,10 @@
+# Data permainan pribadi (dibuat otomatis saat aplikasi dijalankan)
+savedata.json
+savedata.json.tmp
+
+# Python
+__pycache__/
+*.pyc
+
+# VS Code
+.vscode/
