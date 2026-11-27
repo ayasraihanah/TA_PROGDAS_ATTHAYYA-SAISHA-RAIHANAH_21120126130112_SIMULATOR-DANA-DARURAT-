@@ -42,8 +42,8 @@ class CanvasPainter:
     def bgfill(self, color, tags="static", *_args, **_kwargs):
         self.cv.create_rectangle(0, 0, self.pw, self.ph, fill=color, outline="", tags=tags)
 
-    def vgrad(self, x, y, w, h, c1, c2, steps=14, tags="static", *_args, **_kwargs):
-        steps = max(2, min(16, int(steps)))
+    def vgrad(self, x, y, w, h, c1, c2, steps=12, tags="static", *_args, **_kwargs):
+        steps = max(2, min(14, int(steps)))
         sh = h / steps
         for i in range(steps):
             col = kit.mix(c1, c2, i / (steps - 1))
@@ -52,8 +52,8 @@ class CanvasPainter:
                 fill=col, outline="", tags=tags
             )
 
-    def hgrad(self, x, y, w, h, c1, c2, steps=14, tags="static", *_args, **_kwargs):
-        steps = max(2, min(16, int(steps)))
+    def hgrad(self, x, y, w, h, c1, c2, steps=12, tags="static", *_args, **_kwargs):
+        steps = max(2, min(14, int(steps)))
         sw = w / steps
         for i in range(steps):
             col = kit.mix(c1, c2, i / (steps - 1))
@@ -62,7 +62,21 @@ class CanvasPainter:
                 fill=col, outline="", tags=tags
             )
 
+    def _round_pts(self, x, y, w, h, r):
+        r = max(2.0, min(r, w * 0.5, h * 0.5))
+        return [
+            (x + r, y), (x + w - r, y),
+            (x + w, y + r), (x + w, y + h - r),
+            (x + w - r, y + h), (x + r, y + h),
+            (x, y + h - r), (x, y + r),
+        ]
+
     def rect(self, x, y, w, h, fill="", outline="", width=2, tags="dyn", r=0, sh=0, *_args, **_kwargs):
+        if r and r >= 4:
+            if sh:
+                self.poly(self._round_pts(x + sh, y + sh, w, h, r), fill=kit.INK, outline="", width=0, tags=tags)
+            self.poly(self._round_pts(x, y, w, h, r), fill=fill, outline=outline, width=width, tags=tags)
+            return
         if sh:
             self.cv.create_rectangle(
                 x + sh, y + sh, x + w + sh, y + h + sh,
@@ -90,25 +104,22 @@ class CanvasPainter:
     def poly(self, pts, fill="", outline="", width=2, tags="dyn", smooth=False, *_args, **_kwargs):
         if not pts:
             return
+        if len(pts) > 16:
+            pts = pts[::2]
         flat = [coord for pt in pts for coord in pt]
-        # Hindari spline smooth=True untuk poligon dengan banyak titik (penyebab utama lag GDI Windows)
-        use_smooth = bool(smooth) and len(pts) <= 10
         self.cv.create_polygon(
             flat,
             fill=fill or "",
             outline=outline or "",
             width=width if outline else 0,
-            smooth=use_smooth,
+            smooth=False,
             tags=tags
         )
 
     def union(self, shapes, fill="", width=2, tags="dyn", outline=kit.INK, *_args, **_kwargs):
         for item in shapes or []:
-            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], (bool, int)):
-                pts, sm = item[0], bool(item[1])
-            else:
-                pts, sm = item, False
-            self.poly(pts, fill=fill, outline=outline if width else "", width=width, tags=tags, smooth=sm)
+            pts = item[0] if (isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], (bool, int))) else item
+            self.poly(pts, fill=fill, outline=outline if width else "", width=width, tags=tags, smooth=False)
 
     def line(self, pts, fill="#ffffff", width=2, tags="dyn", smooth=False, dash=None, cap="round", *_args, **_kwargs):
         if len(pts) >= 2:
@@ -116,7 +127,7 @@ class CanvasPainter:
             kw = {
                 "fill": fill or "#ffffff",
                 "width": width,
-                "smooth": bool(smooth) and len(pts) <= 8,
+                "smooth": False,
                 "capstyle": cap if cap in ("round", "butt", "projecting") else "round",
                 "tags": tags,
             }
@@ -127,8 +138,8 @@ class CanvasPainter:
     def limb(self, pts, color, w, ow=2, tags="dyn", smooth=False, *_args, **_kwargs):
         if len(pts) < 2:
             return
-        self.line(pts, fill=kit.INK, width=w + ow * 2, tags=tags, smooth=smooth, cap="round")
-        self.line(pts, fill=color, width=w, tags=tags, smooth=smooth, cap="round")
+        self.line(pts, fill=kit.INK, width=w + ow * 2, tags=tags, cap="round")
+        self.line(pts, fill=color, width=w, tags=tags, cap="round")
 
     def text(self, x, y, txt, size=18, fill="#1b1429", anchor="center", width=None, justify="left", tags="dyn", *_args, **_kwargs):
         kw = {
@@ -244,10 +255,11 @@ class GameState:
             return False
 
     def save(self):
-        tmp = self.path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(self.data, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp, self.path)
+        try:
+            with open(self.path, "w", encoding="utf-8") as fh:
+                json.dump(self.data, fh, ensure_ascii=False, indent=2)
+        except OSError:
+            pass
 
     def reset(self):
         self.data = self.default()
@@ -383,8 +395,11 @@ class HubY2K(kit.Screen):
             if self.pose_timer == 0:
                 self.hero_pose = "idle"
                 self.boss_pose = "idle"
+                self.app.mark_dirty()
         if self.speech_timer > 0:
             self.speech_timer = max(0.0, self.speech_timer - dt)
+            if self.speech_timer == 0:
+                self.app.mark_dirty()
 
     def trigger_reaction(self, hero_pose, boss_pose, hero_say, boss_say, cols, fx_x=155):
         self.hero_pose = hero_pose
@@ -393,7 +408,8 @@ class HubY2K(kit.Screen):
         self.speech_text = hero_say
         self.boss_say = boss_say
         self.speech_timer = 2.2
-        self.parts.spawn(fx_x, 290, "star", cols, 12, 220, 140, 480, 0.9, 10)
+        self.parts.spawn(fx_x, 290, "star", cols, 10, 220, 140, 480, 0.8, 10)
+        self.app.mark_dirty()
 
     def draw_static(self):
         art.y2k_bg(self.P, "#ffb3da", "#b9a2ff", seed=4)
@@ -585,7 +601,7 @@ class HubY2K(kit.Screen):
 
 
 # ----------------------------------------------------------------------
-# APLIKASI UTAMA (tk.Tk + LOOP + ROUTER SCREEN + DIALOG/POPUP)
+# APLIKASI UTAMA (tk.Tk + SMART DIRTY LOOP + EVENT KLIK INSTAN)
 # ----------------------------------------------------------------------
 class SaveQuestApp(tk.Tk):
     WIDTH, HEIGHT = 1280, 720
@@ -609,6 +625,8 @@ class SaveQuestApp(tk.Tk):
         self._toast_text = ""
         self._toast_timer = 0.0
         self._toast_color = kit.YELLOW
+        self._dirty = True
+        self._last_hover_idx = -1
 
         self.screens = {
             "title": st.TitleScreen(self),
@@ -618,6 +636,7 @@ class SaveQuestApp(tk.Tk):
         self.current_screen = self.screens["title"]
         self.current_screen.enter(boot=True)
         self.current_screen.draw_static()
+        self._redraw()
 
         self.cv.bind("<Motion>", self._on_motion)
         self.cv.bind("<ButtonPress-1>", self._on_press)
@@ -627,13 +646,29 @@ class SaveQuestApp(tk.Tk):
         self._last_time = time.perf_counter()
         self._loop()
 
+    def mark_dirty(self):
+        self._dirty = True
+
+    def _redraw(self, dt=0.016):
+        self.cv.delete("dyn")
+        self.current_screen.hits = []
+        self.current_screen.draw()
+
+        if self.dialog is not None:
+            self.dialog.draw(dt)
+
+        if self._toast_timer > 0 and self._toast_text:
+            self.P.rect(340, 26, 600, 42, self._toast_color, kit.INK, 3, "dyn", sh=4)
+            self.P.text(640, 47, self._toast_text, 16, kit.INK, tags="dyn")
+        self._dirty = False
+
     def goto(self, name, **kw):
         self.cv.delete("all")
+        self._last_hover_idx = -1
         self.current_screen = self.screens[name]
         self.current_screen.enter(**kw)
         self.current_screen.draw_static()
-        self.current_screen.hits = []
-        self.current_screen.draw()
+        self._redraw()
 
     def start_game(self):
         if not self.game.data.get("setup_done"):
@@ -648,6 +683,7 @@ class SaveQuestApp(tk.Tk):
         self._toast_text = msg
         self._toast_color = color
         self._toast_timer = duration
+        self._dirty = True
 
     def show_events(self, events):
         for kind, payload in events:
@@ -669,49 +705,71 @@ class SaveQuestApp(tk.Tk):
                     "Dana Darurat habis! Ayo mulai menabung lagi.",
                     art=None, color=kit.RED, btn="BANGKIT", sound="lvl"
                 )
+        self._dirty = True
 
     def _on_motion(self, e):
         self.mouse = (e.x, e.y)
+        hits = self.dialog.hits if self.dialog is not None else self.current_screen.hits
+        hov_idx = -1
+        for i, (hx, hy, w, h, _cb) in enumerate(hits):
+            if hx <= e.x <= hx + w and hy <= e.y <= hy + h:
+                hov_idx = i
+                break
+        if hov_idx != self._last_hover_idx:
+            self._last_hover_idx = hov_idx
+            self._dirty = True
 
     def _on_press(self, e):
         self.mouse = (e.x, e.y)
         self.mouse_down = True
         if self.dialog is not None:
             self.dialog.click(e.x, e.y)
+            self.mouse_down = False
+            self._dirty = True
+            self._redraw()
             return
         self.current_screen.click(e.x, e.y)
+        self._dirty = True
+        self._redraw()
 
     def _on_release(self, e):
         self.mouse = (e.x, e.y)
         self.mouse_down = False
+        self._dirty = True
 
     def _on_key(self, e):
         if self.dialog is not None:
             self.dialog.on_key(e.keysym, e.char)
+            self._dirty = True
+            self._redraw()
             return
         self.current_screen.on_key(e.keysym, e.char)
+        self._dirty = True
+        self._redraw()
 
     def _loop(self):
         now = time.perf_counter()
-        dt = min(0.05, max(0.001, now - self._last_time))
+        dt = min(0.08, max(0.001, now - self._last_time))
         self._last_time = now
 
         if self._toast_timer > 0:
             self._toast_timer = max(0.0, self._toast_timer - dt)
+            if self._toast_timer == 0:
+                self._dirty = True
 
         self.current_screen.update(dt)
-        self.cv.delete("dyn")
-        self.current_screen.hits = []
-        self.current_screen.draw()
 
-        if self.dialog is not None:
-            self.dialog.draw(dt)
+        has_parts = bool(getattr(self.current_screen, "parts", None) and self.current_screen.parts.items)
+        is_boot = self.current_screen.name == "title" and self.current_screen.t < st.BOOT + 1.2
+        has_anim = (
+            getattr(self.current_screen, "pose_timer", 0.0) > 0
+            or getattr(self.current_screen, "speech_timer", 0.0) > 0
+            or getattr(self.current_screen, "cheer", 0.0) > 0
+        )
+        if self._dirty or has_parts or is_boot or has_anim or self._toast_timer > 0 or self.dialog is not None:
+            self._redraw(dt)
 
-        if self._toast_timer > 0 and self._toast_text:
-            self.P.rect(340, 26, 600, 42, self._toast_color, kit.INK, 3, "dyn", sh=4)
-            self.P.text(640, 47, self._toast_text, 16, kit.INK, tags="dyn")
-
-        self.after(40, self._loop)
+        self.after(55, self._loop)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""kit.py - Palet warna Y2K, helper gambar/matematika, partikel, dan base class Screen."""
+"""kit.py - Palet warna Y2K, helper gambar/matematika ter-cache, partikel, dan base class Screen."""
 import math
 import random
+from functools import lru_cache
 
 # ----------------------------------------------------------------------
 # PALET WARNA Y2K / PIXEL PASTEL
@@ -30,13 +31,14 @@ DIRT_D = "#6f452c"
 
 
 # ----------------------------------------------------------------------
-# FUNGSI BANTU WARNA, FORMAT & GEOMETRI
+# FUNGSI BANTU WARNA, FORMAT & GEOMETRI (TER-CACHE)
 # ----------------------------------------------------------------------
+@lru_cache(maxsize=256)
 def _hex_to_rgb(hex_color):
     h = (hex_color or "#ffffff").lstrip("#")
     if len(h) != 6:
         return (255, 255, 255)
-    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
 def _rgb_to_hex(r, g, b):
@@ -46,8 +48,9 @@ def _rgb_to_hex(r, g, b):
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+@lru_cache(maxsize=512)
 def mix(c1, c2, t=0.5):
-    t = max(0.0, min(1.0, float(t)))
+    t = max(0.0, min(1.0, round(float(t), 3)))
     r1, g1, b1 = _hex_to_rgb(c1)
     r2, g2, b2 = _hex_to_rgb(c2)
     return _rgb_to_hex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t)
@@ -61,13 +64,15 @@ def darken(hex_color, amt=0.3):
     return mix(hex_color, INK, amt)
 
 
-def ell(cx, cy, rx, ry, steps=24):
-    """Menghasilkan daftar titik (x, y) poligon elips."""
-    pts = []
-    for i in range(steps):
-        ang = (i / steps) * math.tau
-        pts.append((cx + math.cos(ang) * rx, cy + math.sin(ang) * ry))
-    return pts
+@lru_cache(maxsize=16)
+def _unit_circle(steps):
+    return tuple((math.cos(i * math.tau / steps), math.sin(i * math.tau / steps)) for i in range(steps))
+
+
+def ell(cx, cy, rx, ry, steps=16):
+    """Menghasilkan daftar titik (x, y) poligon elips menggunakan tabel sin/cos ter-cache."""
+    steps = max(8, min(16, int(steps)))
+    return [(cx + ux * rx, cy + uy * ry) for ux, uy in _unit_circle(steps)]
 
 
 def rupiah(n):
@@ -78,13 +83,16 @@ def rupiah(n):
 # SISTEM PARTIKEL (confetti, spark, star)
 # ----------------------------------------------------------------------
 class Particles:
+    MAX_ITEMS = 48
+
     def __init__(self):
         self.items = []
 
     def spawn(self, x, y, kind="spark", colors=None, count=10,
               vx_range=240, vy_up=180, gravity=500, life=0.9, size=9):
         cols = colors or [YELLOW, PINK, MINT, SKY, WHITE]
-        for _ in range(count):
+        room = max(0, self.MAX_ITEMS - len(self.items))
+        for _ in range(min(count, room)):
             vx = random.uniform(-vx_range, vx_range)
             vy = random.uniform(-vy_up * 1.3, -vy_up * 0.3)
             self.items.append({
@@ -101,6 +109,8 @@ class Particles:
             })
 
     def update(self, dt):
+        if not self.items:
+            return
         alive = []
         for p in self.items:
             p["life"] -= dt
@@ -125,7 +135,7 @@ class Particles:
 
 
 # ----------------------------------------------------------------------
-# BASE CLASS SCREEN (dipakai TitleScreen, CreatorScreen, dll.)
+# BASE CLASS SCREEN (dipakai TitleScreen, CreatorScreen, HubY2K)
 # ----------------------------------------------------------------------
 class Screen:
     name = "base"

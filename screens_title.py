@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 """screens_title.py - Halaman 1: Opening/Title, Halaman 2: Pembuat Karakter."""
 import math
-import random
 
 import art
 import sfx
 from dialog import Dialog, Popup
 from kit import (INK, CREAM, PINK, HOT, LILAC, SKY, MINT, YELLOW, GOLD, WHITE, GRAY, GREEN, ORANGE, BLUE,
-                 Screen, Particles, lighten, mix)
+                 Screen, Particles, lighten)
 
-BOOT = 3.0
+BOOT = 2.4
 
 CAST = [  # empat tokoh pembuka (original)
     dict(kelas=0, rambut=0, warna_rambut=1, kulit=1, mata=3, baju=0, warna_baju=0, sepatu=0, aksesori=3),
@@ -22,7 +21,7 @@ CAST_SAY = ["Hi!", "Nabung yuk!", "Ayo!", "Semangat!"]
 GY = 640
 
 HOWTO = ("TABUNG = HEAL: HP dompet naik + XP.\nJAJAN impulsif = DAMAGE: HP dan XP turun.\n"
-         "Wishlist gadget jadi BOSS. Makin mahal, makin sulit.\nJalan-jalan di Arena, kumpulkan bintang, lalu SERANG!")
+         "Wishlist gadget jadi BOSS. Makin mahal, makin sulit.\nKumpulkan tabunganmu dan kalahkan semua Boss!")
 
 
 def bounce(k):
@@ -62,8 +61,7 @@ class TitleScreen(Screen):
         if self.t >= BOOT and not self.started:
             self.started = True
             sfx.play("boot")
-            for _ in range(5):
-                self.parts.spawn(640, 200, "confetti", [HOT, YELLOW, MINT, SKY, LILAC], 14, 520, 380, 600, 1.6, 10)
+            self.parts.spawn(640, 200, "confetti", [HOT, YELLOW, MINT, SKY, LILAC], 22, 500, 360, 600, 1.3, 10)
 
     def has_save(self):
         return self.app.game.data["setup_done"]
@@ -71,14 +69,14 @@ class TitleScreen(Screen):
     def start(self):
         self.app.start_game()
 
-    def on_key(self, key, ch):
+    def on_key(self, key, _ch):
         if self.t >= BOOT and key in ("Return", "space", "KP_Enter"):
             self.start()
             return True
         return False
 
     def on_click_extra(self, x, y):
-        for i, (cx, h, f) in enumerate(CAST_POS):
+        for i, (cx, h, _f) in enumerate(CAST_POS):
             if abs(x - cx) < h * 0.28 and GY - h * 1.05 < y < GY:
                 self.hop[i], self.say[i] = 0.7, 1.8
                 sfx.play("star")
@@ -86,14 +84,15 @@ class TitleScreen(Screen):
 
     def click(self, x, y):
         if self.t < BOOT:
-            return False
+            self.t = BOOT
+            return True
         if super().click(x, y):
             return True
         self.on_click_extra(x, y)
         return True
 
-    # ---------------------------------------------------------- gambar
     def draw(self):
+        self.hits = []
         if self.t < BOOT:
             self.draw_boot()
             return
@@ -108,28 +107,26 @@ class TitleScreen(Screen):
         word = "SAVEQUEST"
         cols = [HOT, YELLOW, MINT, SKY, LILAC, HOT, YELLOW, MINT, SKY]
         for i, ch in enumerate(word):
-            k = max(0.0, min(1.0, (t - i * 0.07) / 0.55))
+            k = max(0.0, min(1.0, (t - i * 0.06) / 0.45))
             drop = -(1 - bounce(k)) * 420
             P.stext(640 + (i - 4) * 76, 128 + drop + math.sin(self.t * 3 + i * 0.7) * 5, ch, 104, cols[i], INK, 5)
-        if t > 0.9:
+        if t > 0.7:
             P.rect(420, 206, 440, 46, HOT, INK, 4, r=23, sh=5)
             P.text(640, 230, "Dana Darurat & Wishlist Quest", 21, WHITE)
             P.star(448, 229, 11, YELLOW, INK, 2)
             P.star(832, 229, 11, YELLOW, INK, 2)
-        if t > 1.2:
-            slide = (1 - min(1.0, (t - 1.2) * 3)) * 300
+        if t > 0.9:
+            slide = (1 - min(1.0, (t - 0.9) * 3.5)) * 280
             lab = "LANJUTKAN" if self.has_save() else "MULAI PETUALANGAN"
-            if self.button(450 + slide, 288, 380, 78, lab, MINT, self.start, 27):
-                pass
+            self.button(450 + slide, 288, 380, 78, lab, MINT, self.start, 27)
             P.poly([(450 + slide + 34, 313), (450 + slide + 34, 341), (450 + slide + 58, 327)], WHITE, INK, 3)
             self.button(450 + slide, 380, 380, 58, "CARA MAIN", YELLOW, self.howto, 23)
             self.button(450 + slide, 450, 182, 52, "SUARA " + ("OFF" if sfx.MUTE else "ON"), SKY, self.toggle_snd, 18)
             if self.has_save():
                 self.button(648 + slide, 450, 182, 52, "GAME BARU", PINK, self.newgame, 18)
+                self.button(450 + slide, 514, 380, 52, "KELUAR", GRAY, self.app.quit_app, 20)
             else:
                 self.button(648 + slide, 450, 182, 52, "KELUAR", PINK, self.app.quit_app, 18)
-            if self.has_save():
-                self.button(450 + slide, 514, 380, 52, "KELUAR", GRAY, self.app.quit_app, 20)
             if int(self.t * 2) % 2 == 0:
                 P.stext(640, 674, "tekan ENTER atau SPASI untuk mulai", 19, WHITE, INK, 2)
         self.parts.draw(P)
@@ -137,21 +134,17 @@ class TitleScreen(Screen):
     def draw_boot(self):
         P, t = self.P, self.t
         P.cv.create_rectangle(0, 0, P.pw, P.ph, fill=PINK, outline="", tags="dyn")
-        for i in range(-4, 22):
-            x = (i * 100 + t * 70) % 1600 - 150
+        for i in range(0, 14):
+            x = (i * 110 + t * 70) % 1540 - 130
             P.line([(x, 0), (x - 320, 720)], lighten(PINK, 0.28), 4)
-        bx, by, bw, bh = P.window(270, 130, 740, 440, "", LILAC, CREAM, "savequest.exe/loading")
+        bx, by, bw, _bh = P.window(270, 130, 740, 440, "", LILAC, CREAM, "savequest.exe/loading")
         P.stext(640, by + 62, "SAVEQUEST", 78, YELLOW, INK, 4)
-        prog = min(1.0, t / (BOOT - 0.4))
+        prog = min(1.0, t / (BOOT - 0.3))
         P.bar(bx + 60, by + 160, bw - 120, 40, prog, HOT)
         P.text(640, by + 230, "LOADING... %d%%" % int(prog * 100), 24)
         msgs = ["Memuat dompet...", "Memanggil boss wishlist...", "Mengasah pedang tabungan...", "Siap bertualang!"]
         P.text(640, by + 272, msgs[min(3, int(prog * 4))], 20, "#7a6a8a")
-        for i in range(8):
-            a = t * 1.5 + i * 0.8
-            P.sparkle(640 + math.cos(a) * 430, 350 + math.sin(a * 1.3) * 250, 10 + 4 * math.sin(a * 3), [YELLOW, WHITE, MINT, SKY][i % 4], INK, 2)
 
-    # ---------------------------------------------------------- aksi
     def toggle_snd(self):
         sfx.toggle()
 
@@ -185,7 +178,7 @@ class CreatorScreen(Screen):
         self.nama = g.data["nama"]
         self.parts = Particles()
         self.cheer = 0.0
-        self.shown = [0.3, 0.3, 0.3]
+        self.shown = list(CLASS_STATS[art.opt(self.char, "kelas")[0]])
 
     def draw_static(self):
         art.y2k_bg(self.P, "#ffb3da", "#b9a2ff", seed=8)
@@ -196,19 +189,19 @@ class CreatorScreen(Screen):
         self.cheer = max(0.0, self.cheer - dt)
         self.parts.update(dt)
         tgt = CLASS_STATS[art.opt(self.char, "kelas")[0]]
-        self.shown = [s + (g - s) * min(1.0, dt * 8) for s, g in zip(self.shown, tgt)]
+        self.shown = [s + (g - s) * min(1.0, dt * 10) for s, g in zip(self.shown, tgt)]
 
-    # ---------------------------------------------------------- aksi
     def change(self, key, d):
         art.cycle(self.char, key, d)
         self.cheer = 0.9
-        self.parts.spawn(728, 380, "spark", [YELLOW, WHITE, PINK, MINT], 10, 260, 120, 500, 0.8, 9)
+        sfx.play("click")
+        self.parts.spawn(728, 380, "spark", [YELLOW, WHITE, PINK, MINT], 8, 220, 110, 500, 0.7, 9)
 
     def randomize(self):
         self.char = art.random_char()
         self.cheer = 1.0
         sfx.play("coin")
-        self.parts.spawn(728, 380, "star", [YELLOW, PINK, MINT, SKY], 14, 320, 160, 500, 1.0, 10)
+        self.parts.spawn(728, 380, "star", [YELLOW, PINK, MINT, SKY], 10, 260, 140, 500, 0.8, 10)
 
     def rename(self):
         def ok(r):
@@ -241,27 +234,29 @@ class CreatorScreen(Screen):
             dict(key="saldo", label="Saldo dana darurat saat ini", kind="money", value="0", allow_zero=True)],
             "MULAI!", MINT, ok, "Tips: dana darurat ideal 3-6x pengeluaran bulanan.")
 
-    def on_key(self, key, ch):
+    def on_key(self, key, _ch):
         if key in ("Return", "KP_Enter"):
             self.finish()
             return True
         return False
 
-    # ---------------------------------------------------------- gambar
     def arrow(self, x, y, d, cb):
         P = self.P
         self.button(x, y, 40, 44, "", YELLOW, cb)
         hov = self.hover(x, y, 40, 44)
-        yy = y - (3 if hov and not self.app.mouse_down else 0) + (4 if hov and self.app.mouse_down else 0)
+        yy = y + (3 if hov and self.app.mouse_down else (-3 if hov else 0))
         cx = x + 20
-        P.poly([(cx + 7 * d, yy + 12), (cx - 7 * d, yy + 22), (cx + 7 * d, yy + 32)], INK, INK, 2)
+        # d=-1 -> ujung ke kiri; d=1 -> ujung ke kanan
+        P.poly([(cx - 7 * d, yy + 12), (cx + 7 * d, yy + 22), (cx - 7 * d, yy + 32)], INK, INK, 2)
 
     def draw(self):
         P, ch = self.P, self.char
+        self.hits = []
         cls = art.cls_info(ch)
         cname = art.opt(ch, "kelas")[0]
+
         # ---- kiri: lemari
-        bx, by, bw, bh = P.window(24, 24, 500, 650, "WARDROBE.exe", PINK)
+        bx, by, _bw, _bh = P.window(24, 24, 500, 650, "WARDROBE.exe", PINK)
         for i, (key, label) in enumerate(art.ROWS):
             y = by + 12 + i * 62
             P.text(bx + 16, y + 22, label, 17, INK, "w")
@@ -274,32 +269,27 @@ class CreatorScreen(Screen):
                 P.text(bx + 266, y + 23, lab, 18, INK, "w")
             else:
                 P.text(bx + 327, y + 23, lab, 18, INK)
-        # ---- tengah: panggung
+
+        # ---- tengah: panggung (ringan tanpa poligon sinar meluap batas)
         sx, sy, sw, sh = 548, 24, 360, 650
         P.rect(sx, sy, sw, sh, lighten(cls["col"], 0.35), INK, 4, r=20, sh=7)
-        cx, cy = sx + sw / 2, 300
-        for i in range(14):
-            a = self.t * 0.25 + i * math.tau / 14
-            a2 = a + math.tau / 28
-            P.poly([(cx, cy), (cx + 560 * math.cos(a), cy + 560 * math.sin(a)), (cx + 560 * math.cos(a2), cy + 560 * math.sin(a2))],
-                   lighten(cls["col"], 0.55), "", 0)
-        P.rect(sx - 2, sy - 2, 4, 4, "", "", 0)
+        cx = sx + sw / 2
+        P.oval(cx, 300, 142, 142, lighten(cls["col"], 0.58), "", 0)
         P.rect(sx, sy + 560, sw, 90, INK, INK, 4, r=20)
         P.rect(sx, sy + 560, sw, 40, INK, "", 0)
         P.rect(sx, sy, sw, sh, "", INK, 4, r=20)
-        for i in range(5):
-            a = self.t * 0.8 + i * 1.3
-            P.sparkle(sx + 60 + (i * 67) % 250, sy + 70 + 40 * math.sin(a) + i * 60, 10 + 3 * math.sin(a * 2), [YELLOW, WHITE, PINK][i % 3], INK, 2)
-        art.draw_chibi(P, cx, sy + 540, 440, ch, self.t, "cheer" if self.cheer > 0 else "idle")
+
+        art.draw_chibi(P, cx, sy + 540, 410, ch, self.t, "cheer" if self.cheer > 0 else "idle")
         word = cls["say"][int(self.t / 2.5) % len(cls["say"])]
-        art.draw_speech(P, cx + 90, sy + 150, word, 24, WHITE)
+        art.draw_speech(P, cx + 85, sy + 148, word, 22, WHITE)
         P.text(sx + 22, sy + 580, "ATTACK:", 17, YELLOW, "w")
         P.text(sx + 110, sy + 580, cls["atk"], 19, CREAM, "w")
         P.text(sx + 22, sy + 618, "SPELL:", 17, YELLOW, "w")
         P.text(sx + 110, sy + 618, cls["spell"], 19, CREAM, "w")
+
         # ---- kanan: kartu karakter
-        rx, ry, rw, rh = P.window(924, 24, 332, 650, "CHARACTER.exe", LILAC)
-        self.button(rx + 12, ry + 12, rw - 24, 56, self.nama + "  (ubah)", YELLOW, self.rename, 24)
+        rx, ry, rw, _rh = P.window(924, 24, 332, 650, "CHARACTER.exe", LILAC)
+        self.button(rx + 12, ry + 12, rw - 24, 56, self.nama + "  (ubah)", YELLOW, self.rename, 22)
         P.text(rx + 16, ry + 100, "KELAS", 16, "#6f6580", "w")
         P.stext(rx + rw / 2, ry + 132, cname.upper(), 30, cls["col"], INK, 3)
         P.text(rx + 16, ry + 176, "HP", 22, INK, "w")

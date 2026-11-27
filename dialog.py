@@ -9,7 +9,8 @@ def grp(digits):
 
 
 def _overlay(P):
-    P.cv.create_rectangle(0, 0, P.pw, P.ph, fill=INK, outline="", stipple="gray50", tags="dyn")
+    # Bingkai gelap semi-kontras ringan tanpa stipple GDI yang lambat di Windows
+    P.cv.create_rectangle(14, 14, P.pw - 14, P.ph - 14, fill="", outline=INK, width=14, tags="dyn")
 
 
 def _btn(owner, x, y, w, h, label, color, cb, size=22):
@@ -42,9 +43,9 @@ class Dialog:
                 break
         self.hits, self.err, self.t = [], "", 0.0
 
-    # ---------------------------------------------------------- aksi
     def close(self):
         self.app.dialog = None
+        self.app.mark_dirty()
 
     def cancel(self):
         self.close()
@@ -108,9 +109,8 @@ class Dialog:
                 sfx.play("click")
                 cb()
                 return True
-        return True  # modal: klik di luar tidak menembus
+        return True
 
-    # ---------------------------------------------------------- gambar
     def draw(self, dt):
         P = self.P
         self.t += dt
@@ -119,7 +119,7 @@ class Dialog:
         W = 640
         H = 190 + len(self.fields) * 92 + (26 if self.subtitle else 0)
         x = (1280 - W) / 2
-        y = (720 - H) / 2 + (1 - min(1.0, self.t * 5)) ** 2 * 70
+        y = (720 - H) / 2 + (1 - min(1.0, self.t * 6)) ** 2 * 50
         bx, by, bw, bh = P.window(x, y, W, H, self.title, self.color)
         ty = by + 16
         if self.subtitle:
@@ -170,10 +170,11 @@ class Popup:
 
     def close(self):
         self.app.dialog = None
+        self.app.mark_dirty()
         if self.on_close:
             self.on_close()
 
-    def on_key(self, key, ch):
+    def on_key(self, key, _ch):
         if key in ("Return", "KP_Enter", "space", "Escape"):
             self.close()
 
@@ -190,8 +191,8 @@ class Popup:
         _overlay(P)
         W, H = 680, 470
         x = (1280 - W) / 2
-        k = min(1.0, self.t * 4)
-        y = (720 - H) / 2 + (1 - k) ** 2 * 90
+        k = min(1.0, self.t * 5)
+        y = (720 - H) / 2 + (1 - k) ** 2 * 60
         bx, by, bw, bh = P.window(x, y, W, H, "NOTIFICATION.exe", self.color)
         P.stext(x + W / 2, by + 46, self.title, 44, self.color, INK, 4)
         if self.art:
