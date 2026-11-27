@@ -29,10 +29,10 @@ SAVE_FILE = os.path.join(BASE_DIR, "savedata.json")
 # TEMA WARNA & FONT (gaya pixel / retro game)
 
 C = {
-    "bg": "#1b1f3b",
-    "panel": "#2a2f5a",
-    "panel_dark": "#14172e",
-    "border": "#0b0d1f",
+    "bg": "#F1ECF6",
+    "panel": "#5b6aec",
+    "panel_dark": "#fd0093",
+    "border": "#59afe8",
     "text": "#f5f0e1",
     "muted": "#9aa3d6",
     "yellow": "#ffcc33",
