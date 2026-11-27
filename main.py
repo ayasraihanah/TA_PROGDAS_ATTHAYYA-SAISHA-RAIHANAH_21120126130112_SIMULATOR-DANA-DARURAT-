@@ -1,158 +1,228 @@
 # -*- coding: utf-8 -*-
 """
-SaveQuest - Simulator Tabungan "Dana Darurat & Wishlist Gadget"
-Tugas Akhir Teknologi Informasi
-
-Konsep: gamifikasi menabung ala game RPG.
-  - HP Bar      : kesehatan dompet (saldo Dana Darurat dibanding targetnya)
-  - Menabung    : HEAL  -> HP naik, dapat XP
-  - Jajan       : DAMAGE -> HP turun, XP dipotong (penalti)
-  - Boss        : tiap barang wishlist gadget adalah boss. Tabung = serang boss.
-  - Level & XP  : makin rajin menabung, makin tinggi gelar karaktermu
-
-Dibuat dengan Python + tkinter (tanpa library tambahan).
-Jalankan dengan:  python savequest.py
+main.py - Entry point SaveQuest (Y2K + Tabungan Dana Darurat & Boss Wishlist)
+Jalankan dengan: python -u main.py
 """
 
 import json
 import math
 import os
-import random
-import re
 import time
 import tkinter as tk
 from datetime import datetime
-import art
-import dialog
-from dialog import Dialog, Popup
+
 import kit
+import art
 import sfx
-from screens_title import TitleScreen, CreatorScreen
+from dialog import Dialog, Popup
+import screens_title as st
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAVE_FILE = os.path.join(BASE_DIR, "savedata.json")
 
-# ----------------------------------------------------------------------
-# TEMA WARNA & FONT (gaya pixel / retro game)
-# ----------------------------------------------------------------------
-C = {
-    "bg": "#1b1f3b",
-    "panel": "#2a2f5a",
-    "panel_dark": "#14172e",
-    "border": "#0b0d1f",
-    "text": "#f5f0e1",
-    "muted": "#9aa3d6",
-    "yellow": "#ffcc33",
-    "yellow_d": "#c98f00",
-    "red": "#e8433f",
-    "red_d": "#9c1f1f",
-    "green": "#4cc95c",
-    "green_d": "#2a8a38",
-    "blue": "#3f8fe8",
-    "blue_d": "#1f5aa6",
-    "pink": "#ff6fae",
-    "pink_d": "#b53a76",
-    "gray": "#6b7090",
-    "gray_d": "#3f4263",
-}
-FONT_NAME = "Courier New"
-
-
-def pf(size):
-    """Font tebal ala terminal/pixel."""
-    return (FONT_NAME, size, "bold")
-
 
 # ----------------------------------------------------------------------
-# SPRITE PIXEL ART (digambar per kotak di Canvas)
-# Huruf = kode warna, titik = transparan
+# PAINTER (P) UNTUK CANVAS 1280x720 (100% KOMPATIBEL DENGAN art.py)
 # ----------------------------------------------------------------------
-HEART = [
-    "..KKK.KKK..",
-    ".KRRRKRRRK.",
-    "KRWWRRRRRRK",
-    "KRWRRRRRRRK",
-    "KRRRRRRRRRK",
-    ".KRRRRRRRK.",
-    "..KRRRRRK..",
-    "...KRRRK...",
-    "....KRK....",
-    ".....K.....",
-]
-COIN = [
-    "..KKKK..",
-    ".KYYYYK.",
-    "KYYWYYYK",
-    "KYWYYDYK",
-    "KYYYYDYK",
-    "KYYYDDYK",
-    ".KYYYYK.",
-    "..KKKK..",
-]
-SKULL = [
-    ".KKKKKKK.",
-    "KWWWWWWWK",
-    "KWWWWWWWK",
-    "KWKKWKKWK",
-    "KWKKWKKWK",
-    "KWWWKWWWK",
-    ".KWWWWWK.",
-    ".KWKWKWK.",
-    "..KKKKK..",
-]
-STAR = [
-    "....K....",
-    "...KYK...",
-    "...KYK...",
-    "KKKKYKKKK",
-    "KYYYYYYYK",
-    ".KYYYYYK.",
-    ".KYYYYYK.",
-    "KYYKKKYYK",
-    "KKK...KKK",
-]
-MONSTER = [
-    "KK.......KK",
-    "KRK.....KRK",
-    ".KRKKKKKRK.",
-    ".KRRRRRRRK.",
-    "KRWKRRRKWRK",
-    "KRRRRRRRRRK",
-    "KRRKWKWKRRK",
-    ".KRRKKKRRK.",
-    "..KKRRRKK..",
-    "....KKK....",
-]
-HERO = [
-    "...KKKK...",
-    "..KBBBBK..",
-    ".KBBBBBBK.",
-    ".KSSSSSSK.",
-    ".KSKSSKSK.",
-    ".KSSSSSSK.",
-    "..KSSSSK..",
-    ".KKRRRRKK.",
-    "KRRRRRRRRK",
-    "KRKRRRRKRK",
-    "KSKRRRRKSK",
-    ".KKRKKRKK.",
-    "..KBKKBK..",
-    "..KKK.KKK.",
-]
+class CanvasPainter:
+    def __init__(self, cv, pw=1280, ph=720):
+        self.cv = cv
+        self.pw = pw
+        self.ph = ph
 
-PAL = {
-    "K": C["border"],
-    "W": "#ffffff",
-    "Y": C["yellow"],
-    "D": C["yellow_d"],
-    "R": C["red"],
-    "B": C["blue"],
-    "S": "#f2c79b",
-    "G": C["green"],
-}
-PAL_EMPTY_HEART = {"K": C["border"], "R": "#3a3f6a", "W": "#3a3f6a"}
+    def _font(self, size, weight="bold"):
+        return ("Courier New", max(8, int(size * 0.62)), weight)
 
-BOSS_COLORS = ["#9b59d0", "#3fb26b", "#e8833f", "#3f8fe8", "#d9467a"]
+    def _round_pts(self, x, y, w, h, r):
+        r = max(0.0, min(float(r), w / 2.0, h / 2.0))
+        if r <= 0.5:
+            return None
+        pts = []
+        corners = [
+            (x + w - r, y + r, -math.pi / 2, 0.0),
+            (x + w - r, y + h - r, 0.0, math.pi / 2),
+            (x + r, y + h - r, math.pi / 2, math.pi),
+            (x + r, y + r, math.pi, 1.5 * math.pi),
+        ]
+        for cx, cy, a0, a1 in corners:
+            for i in range(6):
+                a = a0 + (a1 - a0) * (i / 5.0)
+                pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+        return pts
+
+    def bgfill(self, color, tags="static", *_args, **_kwargs):
+        self.cv.create_rectangle(0, 0, self.pw, self.ph, fill=color, outline="", tags=tags)
+
+    def vgrad(self, x, y, w, h, c1, c2, steps=24, tags="static", *_args, **_kwargs):
+        steps = max(2, int(steps))
+        sh = h / steps
+        for i in range(steps):
+            col = kit.mix(c1, c2, i / (steps - 1))
+            self.cv.create_rectangle(
+                x, y + i * sh, x + w, y + (i + 1) * sh + 1,
+                fill=col, outline="", tags=tags
+            )
+
+    def hgrad(self, x, y, w, h, c1, c2, steps=24, tags="static", *_args, **_kwargs):
+        steps = max(2, int(steps))
+        sw = w / steps
+        for i in range(steps):
+            col = kit.mix(c1, c2, i / (steps - 1))
+            self.cv.create_rectangle(
+                x + i * sw, y, x + (i + 1) * sw + 1, y + h,
+                fill=col, outline="", tags=tags
+            )
+
+    def rect(self, x, y, w, h, fill="", outline="", width=2, tags="dyn", r=0, sh=0, *_args, **_kwargs):
+        rpts = self._round_pts(x, y, w, h, r)
+        if sh:
+            if rpts:
+                spts = [(px + sh, py + sh) for px, py in rpts]
+                self.poly(spts, fill=kit.INK, outline="", width=0, tags=tags, smooth=True)
+            else:
+                self.cv.create_rectangle(
+                    x + sh, y + sh, x + w + sh, y + h + sh,
+                    fill=kit.INK, outline="", tags=tags
+                )
+        if rpts:
+            self.poly(rpts, fill=fill or "", outline=outline or "", width=width if outline else 0, tags=tags, smooth=True)
+        else:
+            self.cv.create_rectangle(
+                x, y, x + w, y + h,
+                fill=fill or "", outline=outline or "",
+                width=width if outline else 0, tags=tags
+            )
+
+    def oval(self, x, y, rx, ry, fill="", outline="", width=2, tags="dyn", stipple=None, *_args, **_kwargs):
+        kw = {
+            "fill": fill or "",
+            "outline": outline or "",
+            "width": width if outline else 0,
+            "tags": tags,
+        }
+        if stipple:
+            kw["stipple"] = stipple
+        self.cv.create_oval(x - rx, y - ry, x + rx, y + ry, **kw)
+
+    def poly(self, pts, fill="", outline="", width=2, tags="dyn", smooth=False, *_args, **_kwargs):
+        if not pts:
+            return
+        flat = [coord for pt in pts for coord in pt]
+        self.cv.create_polygon(
+            flat,
+            fill=fill or "",
+            outline=outline or "",
+            width=width if outline else 0,
+            smooth=bool(smooth),
+            tags=tags
+        )
+
+    def union(self, shapes, fill="", width=2, tags="dyn", outline=kit.INK, *_args, **_kwargs):
+        """Signature art.py: P.union([(pts, smooth), ...], fill, ow, tags)."""
+        parsed = []
+        for item in shapes or []:
+            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], (bool, int)):
+                parsed.append((item[0], bool(item[1])))
+            else:
+                parsed.append((item, False))
+        if outline and width:
+            for pts, sm in parsed:
+                self.poly(pts, fill=outline, outline=outline, width=width, tags=tags, smooth=sm)
+        if fill:
+            for pts, sm in parsed:
+                self.poly(pts, fill=fill, outline="", width=0, tags=tags, smooth=sm)
+
+    def line(self, pts, fill="#ffffff", width=2, tags="dyn", smooth=False, dash=None, cap="round", *_args, **_kwargs):
+        if len(pts) >= 2:
+            flat = [coord for pt in pts for coord in pt]
+            kw = {
+                "fill": fill or "#ffffff",
+                "width": width,
+                "smooth": bool(smooth),
+                "capstyle": cap if cap in ("round", "butt", "projecting") else "round",
+                "joinstyle": "round",
+                "tags": tags,
+            }
+            if dash:
+                kw["dash"] = dash
+            self.cv.create_line(flat, **kw)
+
+    def limb(self, pts, color, w, ow=2, tags="dyn", smooth=False, *_args, **_kwargs):
+        """Menggambar kaki/lengan/ekor tebal dengan garis tepi tinta di luar."""
+        if len(pts) < 2:
+            return
+        self.line(pts, fill=kit.INK, width=w + ow * 2, tags=tags, smooth=smooth, cap="round")
+        self.line(pts, fill=color, width=w, tags=tags, smooth=smooth, cap="round")
+
+    def text(self, x, y, txt, size=18, fill="#1b1429", anchor="center", width=None, justify="left", tags="dyn", *_args, **_kwargs):
+        kw = {
+            "text": str(txt),
+            "font": self._font(size),
+            "fill": fill,
+            "anchor": anchor,
+            "justify": justify,
+            "tags": tags,
+        }
+        if width is not None:
+            kw["width"] = int(width)
+        self.cv.create_text(x, y, **kw)
+
+    def stext(self, x, y, txt, size=24, fill="#ffe066", outline="#1b1429", off=3, tags="dyn", *_args, **_kwargs):
+        self.text(x + off, y + off, txt, size, outline, "center", tags=tags)
+        self.text(x, y, txt, size, fill, "center", tags=tags)
+
+    def bar(self, x, y, w, h, ratio, color="#6ef2c2", tags="dyn", *_args, **_kwargs):
+        ratio = max(0.0, min(1.0, float(ratio)))
+        self.rect(x, y, w, h, fill=kit.CREAM, outline=kit.INK, width=3, tags=tags, r=h / 2)
+        if ratio > 0:
+            iw = max(h - 6, (w - 6) * ratio)
+            self.rect(x + 3, y + 3, min(w - 6, iw), max(4, h - 6), fill=color, outline="", tags=tags, r=(h - 6) / 2)
+
+    def star(self, cx, cy, r, fill="#ffe066", outline="#1b1429", width=2, tags="dyn", *_args, **_kwargs):
+        pts = []
+        for i in range(10):
+            ang = -math.pi / 2 + i * math.pi / 5
+            rad = r if i % 2 == 0 else r * 0.45
+            pts.append((cx + math.cos(ang) * rad, cy + math.sin(ang) * rad))
+        self.poly(pts, fill=fill, outline=outline, width=width, tags=tags)
+
+    def sparkle(self, cx, cy, r, fill="#ffe066", outline="#1b1429", width=2, tags="dyn", *_args, **_kwargs):
+        pts = [
+            (cx, cy - r), (cx + r * 0.28, cy - r * 0.28),
+            (cx + r, cy), (cx + r * 0.28, cy + r * 0.28),
+            (cx, cy + r), (cx - r * 0.28, cy + r * 0.28),
+            (cx - r, cy), (cx - r * 0.28, cy - r * 0.28),
+        ]
+        self.poly(pts, fill=fill, outline=outline, width=width, tags=tags)
+
+    def heart(self, cx, cy, r, fill="#ff4fa3", outline="#1b1429", width=2, tags="dyn", *_args, **_kwargs):
+        pts = []
+        for i in range(24):
+            a = (i / 24.0) * math.tau
+            hx = 16 * (math.sin(a) ** 3)
+            hy = -(13 * math.cos(a) - 5 * math.cos(2 * a) - 2 * math.cos(3 * a) - math.cos(4 * a))
+            pts.append((cx + (hx / 16.0) * r, cy + (hy / 16.0) * r))
+        self.poly(pts, fill=fill, outline=outline, width=width, tags=tags, smooth=True)
+
+    def hearts_row(self, x, y, count, total=6, size=14, gap=6, tags="dyn", *_args, **_kwargs):
+        for i in range(total):
+            col = kit.HOT if i < count else kit.GRAY
+            self.heart(x + i * (size + gap) + size * 0.5, y + size * 0.5, size * 0.5, col, kit.INK, 2, tags=tags)
+
+    def window(self, x, y, w, h, title="WINDOW.exe", header_col=kit.PINK, body_col=kit.CREAM, sub="", tags="dyn", *_args, **_kwargs):
+        bar_h = 34
+        self.rect(x, y, w, h, fill=body_col, outline=kit.INK, width=4, tags=tags, sh=6)
+        self.rect(x, y, w, bar_h, fill=header_col, outline=kit.INK, width=4, tags=tags)
+        label = sub or title
+        if label:
+            self.text(x + 14, y + bar_h / 2, label, 16, kit.INK, "w", tags=tags)
+        self.rect(x + w - 26, y + 8, 18, 18, fill=kit.HOT, outline=kit.INK, width=2, tags=tags)
+        return x, y + bar_h, w, h - bar_h
+
+
+# ----------------------------------------------------------------------
+# LOGIKA GAME (DANA DARURAT + XP/LEVEL + BOSS WISHLIST)
+# ----------------------------------------------------------------------
 TITLES = [
     "Rookie Saver",
     "Coin Collector",
@@ -164,46 +234,6 @@ TITLES = [
 ]
 
 
-def draw_sprite(canvas, x, y, rows, palette, scale, tags=None):
-    """Gambar sprite pixel art ke canvas."""
-    for r, row in enumerate(rows):
-        for c, ch in enumerate(row):
-            color = palette.get(ch)
-            if not color:
-                continue
-            kw = {"tags": tags} if tags else {}
-            canvas.create_rectangle(
-                x + c * scale, y + r * scale,
-                x + (c + 1) * scale, y + (r + 1) * scale,
-                fill=color, outline="", **kw
-            )
-
-
-# ----------------------------------------------------------------------
-# FUNGSI BANTU
-# ----------------------------------------------------------------------
-def rupiah(n):
-    return "Rp " + f"{int(n):,}".replace(",", ".")
-
-
-def parse_rupiah(text):
-    """'50.000', 'Rp 50000', '50,000' -> 50000. Return None jika kosong."""
-    digits = re.sub(r"\D", "", text or "")
-    return int(digits) if digits else None
-
-
-def lighten(hex_color, amt=0.3):
-    h = hex_color.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-    r = int(r + (255 - r) * amt)
-    g = int(g + (255 - g) * amt)
-    b = int(b + (255 - b) * amt)
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
-# ----------------------------------------------------------------------
-# LOGIKA GAME (terpisah dari tampilan supaya mudah dibaca & diuji)
-# ----------------------------------------------------------------------
 class GameState:
     def __init__(self, path=SAVE_FILE):
         self.path = path
@@ -214,21 +244,23 @@ class GameState:
     def default():
         return {
             "nama": "Hero",
-            "target": 5_000_000,   # target dana darurat
-            "saldo": 0,            # saldo dana darurat sekarang
+            "target": 5_000_000,
+            "saldo": 0,
             "level": 1,
             "xp": 0,
-            "bosses": [],          # wishlist gadget
-            "log": [],             # riwayat transaksi
+            "bosses": [],
+            "log": [],
             "setup_done": False,
+            "char": {},
         }
 
-    # ---------- penyimpanan ----------
     def load(self):
         try:
             with open(self.path, "r", encoding="utf-8") as fh:
                 saved = json.load(fh)
-            self.data.update(saved)
+            merged = self.default()
+            merged.update(saved)
+            self.data = merged
             return True
         except (OSError, ValueError):
             return False
@@ -243,12 +275,9 @@ class GameState:
         self.data = self.default()
         self.save()
 
-    # ---------- info status ----------
     def hp_ratio(self):
         t = self.data["target"]
-        if t <= 0:
-            return 0.0
-        return max(0.0, min(1.0, self.data["saldo"] / t))
+        return max(0.0, min(1.0, self.data["saldo"] / t)) if t > 0 else 0.0
 
     def hp_percent(self):
         return int(self.hp_ratio() * 100)
@@ -256,12 +285,12 @@ class GameState:
     def status(self):
         r = self.hp_ratio()
         if self.data["saldo"] <= 0:
-            return "GAME OVER", C["red"]
+            return "GAME OVER", kit.RED
         if r >= 0.6:
-            return "SEHAT", C["green"]
+            return "SEHAT", kit.GREEN
         if r >= 0.3:
-            return "WASPADA", C["yellow"]
-        return "KRITIS", C["red"]
+            return "WASPADA", kit.YELLOW
+        return "KRITIS", kit.RED
 
     def xp_needed(self):
         return 100 * self.data["level"]
@@ -269,7 +298,6 @@ class GameState:
     def title(self):
         return TITLES[min(self.data["level"] - 1, len(TITLES) - 1)]
 
-    # ---------- log ----------
     def _log(self, tipe, teks):
         self.data["log"].append({
             "waktu": datetime.now().strftime("%d/%m %H:%M"),
@@ -278,7 +306,6 @@ class GameState:
         })
         self.data["log"] = self.data["log"][-200:]
 
-    # ---------- XP & level ----------
     def _gain_xp(self, amount):
         events = []
         d = self.data
@@ -290,54 +317,45 @@ class GameState:
             events.append(("level_up", d["level"]))
         return events
 
-    # ---------- aksi utama ----------
+    def unlock_hero(self):
+        self._log("info", f"Hero {self.data['nama']} siap bertualang!")
+        self.save()
+        return []
+
     def add_saving(self, jumlah, ket="", boss_id=None):
-        """Menabung = HEAL. Bisa ke Dana Darurat (boss_id=None) atau menyerang boss."""
         d = self.data
         events = []
-        crit = jumlah >= 0.1 * d["target"]
         xp = 5 + jumlah // 5000
-        if crit:
-            xp *= 2
-        tag = " CRITICAL HEAL!" if crit else ""
-
         if boss_id is None:
             d["saldo"] += jumlah
-            self._log("heal", f"+{rupiah(jumlah)} ke Dana Darurat ({ket or 'menabung'}) | +{xp} XP{tag}")
+            self._log("heal", f"+{kit.rupiah(jumlah)} ke Dana Darurat ({ket or 'menabung'}) | +{xp} XP")
         else:
             boss = self.find_boss(boss_id)
             boss["terkumpul"] += jumlah
-            self._log("boss", f"Serang {boss['nama']}: {rupiah(jumlah)} ({ket or 'menabung'}) | +{xp} XP{tag}")
+            self._log("boss", f"Serang {boss['nama']}: {kit.rupiah(jumlah)} ({ket or 'menabung'}) | +{xp} XP")
             if boss["terkumpul"] >= boss["harga"] and not boss["defeated"]:
                 boss["defeated"] = True
                 xp += 150
                 self._log("boss", f"BOSS DEFEATED: {boss['nama']}! Bonus +150 XP")
                 events.append(("boss_defeated", boss))
-
         events += self._gain_xp(xp)
         self.save()
         return events
 
     def add_spending(self, jumlah, ket=""):
-        """Jajan impulsif = DAMAGE + penalti XP."""
         d = self.data
         events = []
         before = d["saldo"]
         d["saldo"] = max(0, d["saldo"] - jumlah)
-        crit = jumlah >= 0.1 * d["target"]
         loss = 3 + jumlah // 5000
-        if crit:
-            loss *= 2
         d["xp"] = max(0, d["xp"] - loss)
-        tag = " CRITICAL HIT!" if crit else ""
-        self._log("damage", f"-{rupiah(jumlah)} jajan ({ket or 'impulsif'}) | -{loss} XP{tag}")
+        self._log("damage", f"-{kit.rupiah(jumlah)} jajan ({ket or 'impulsif'}) | -{loss} XP")
         if before > 0 and d["saldo"] == 0:
             self._log("damage", "HP habis! GAME OVER")
             events.append(("game_over", None))
         self.save()
         return events
 
-    # ---------- wishlist / boss ----------
     def find_boss(self, boss_id):
         for b in self.data["bosses"]:
             if b["id"] == boss_id:
@@ -352,7 +370,7 @@ class GameState:
             "terkumpul": 0,
             "defeated": False,
         })
-        self._log("info", f"Boss baru muncul: {nama} ({rupiah(harga)})")
+        self._log("info", f"Boss baru muncul: {nama} ({kit.rupiah(harga)})")
         self.save()
 
     def remove_boss(self, boss_id):
@@ -363,645 +381,348 @@ class GameState:
 
 
 # ----------------------------------------------------------------------
-# KOMPONEN UI PIXEL
+# HUB Y2K INTERAKTIF (TABUNG, JAJAN, BOSS WISHLIST, CUSTOM HERO)
 # ----------------------------------------------------------------------
-class PixelBar(tk.Canvas):
-    """Bar bersegmen ala HP bar game."""
-    SEGMENTS = 20
+class HubY2K(kit.Screen):
+    name = "hub"
 
-    def __init__(self, master, width=300, height=24, color=None, bg=None):
-        super().__init__(master, width=width, height=height,
-                         bg=bg or C["panel"], highlightthickness=0)
-        self.w, self.h = width, height
-        self.color = color or C["green"]
-        self.ratio = 0.0
-        self.draw()
+    def enter(self, **_kw):
+        super().enter()
+        self.selected_boss_id = None
+        self.hero_pose = "idle"
+        self.pose_timer = 0.0
+        self.speech_text = ""
+        self.speech_timer = 0.0
+        self.parts = kit.Particles()
 
-    def set(self, ratio, color=None):
-        self.ratio = max(0.0, min(1.0, ratio))
-        if color:
-            self.color = color
-        self.draw()
+    def update(self, dt):
+        super().update(dt)
+        self.parts.update(dt)
+        if self.pose_timer > 0:
+            self.pose_timer = max(0.0, self.pose_timer - dt)
+            if self.pose_timer == 0:
+                self.hero_pose = "idle"
+        if self.speech_timer > 0:
+            self.speech_timer = max(0.0, self.speech_timer - dt)
 
-    def draw(self, override=None):
-        self.delete("all")
-        w, h = self.w, self.h
-        self.create_rectangle(0, 0, w, h, fill=C["border"], outline="")
-        self.create_rectangle(3, 3, w - 3, h - 3, fill=C["panel_dark"], outline="")
-        seg_w = (w - 10) / self.SEGMENTS
-        filled = math.ceil(self.ratio * self.SEGMENTS - 1e-9) if self.ratio > 0 else 0
-        col = override or self.color
-        light = lighten(col, 0.4)
-        for i in range(filled):
-            x0 = 5 + i * seg_w
-            x1 = x0 + seg_w - 2
-            self.create_rectangle(x0, 5, x1, h - 5, fill=col, outline="")
-            self.create_rectangle(x0, 5, x1, 5 + max(2, (h - 10) // 3), fill=light, outline="")
+    def trigger_reaction(self, pose, say, cols):
+        self.hero_pose = pose
+        self.pose_timer = 1.4
+        self.speech_text = say
+        self.speech_timer = 2.2
+        self.parts.spawn(175, 290, "star", cols, 14, 240, 150, 480, 1.0, 10)
 
-    def flash(self):
-        self.draw(override="#ffffff")
-        self.after(120, self.draw)
+    def draw_static(self):
+        art.y2k_bg(self.P, "#ffb3da", "#b9a2ff", seed=4)
+        art.taskbar(self.P)
 
+    def on_key(self, key, _ch):
+        if key == "Escape":
+            self.app.goto("title")
+            return True
+        return False
 
-class PixelButton(tk.Frame):
-    """Tombol kotak bergaya game (menekan = turun sedikit)."""
+    def draw(self):
+        P = self.P
+        g, d = self.app.game, self.app.game.data
+        self.hits = []
 
-    def __init__(self, master, text, command, color, dark, fg="#ffffff",
-                 font_size=11, width=16):
-        super().__init__(master, bg=C["border"], padx=3, pady=3, cursor="hand2")
-        self.base = tk.Frame(self, bg=dark)
-        self.base.pack(fill="x")
-        self.lbl = tk.Label(self.base, text=text, bg=color, fg=fg,
-                            font=pf(font_size), width=width, pady=5)
-        self.lbl.pack(fill="x", pady=(0, 4))
-        self.color, self.command = color, command
-        for w in (self, self.base, self.lbl):
-            w.bind("<Enter>", self._enter)
-            w.bind("<Leave>", self._leave)
-            w.bind("<ButtonPress-1>", self._press)
-            w.bind("<ButtonRelease-1>", self._release)
+        # Top bar aksi utama
+        P.window(24, 18, 1232, 86, "SAVEQUEST_HUB.exe", kit.PINK, kit.CREAM, tags="dyn")
+        self.button(40, 56, 175, 38, "+ TABUNG", kit.MINT, self.open_save, 16)
+        self.button(227, 56, 175, 38, "- JAJAN", kit.RED, self.open_spend, 16)
+        self.button(414, 56, 175, 38, "+ BOSS", kit.SKY, self.open_add_boss, 16)
+        self.button(601, 56, 195, 38, "CUSTOM HERO", kit.LILAC, lambda: self.app.goto("creator"), 15)
+        self.button(808, 56, 185, 38, "PENGATURAN", kit.YELLOW, self.open_settings, 15)
+        self.button(1005, 56, 115, 38, "RESET", kit.GRAY, self.open_reset, 15)
+        self.button(1132, 56, 108, 38, "TITLE", kit.ORANGE, lambda: self.app.goto("title"), 15)
 
-    def _enter(self, _e):
-        self.lbl.config(bg=lighten(self.color, 0.2))
+        # Panel Kiri: Hero, Potion Dana Darurat & Status
+        P.window(24, 118, 580, 550, "HERO_STATUS.exe", kit.SKY, kit.CREAM, tags="dyn")
+        P.rect(44, 164, 540, 224, "#bfeaff", kit.INK, 3, "dyn", r=14)
+        art.draw_clouds(P, self.t)
 
-    def _leave(self, _e):
-        self.lbl.config(bg=self.color)
-        self.lbl.pack_configure(pady=(0, 4))
+        char_cfg = dict(d.get("char") or {})
+        for k in art.OPT:
+            char_cfg.setdefault(k, art.DEFAULT_IDX[k])
+        art.draw_chibi(P, 175, 372, 168, char_cfg, self.t, self.hero_pose, 1)
+        if self.speech_timer > 0 and self.speech_text:
+            art.draw_speech(P, 205, 196, self.speech_text, 19, kit.WHITE)
 
-    def _press(self, _e):
-        self.lbl.pack_configure(pady=(4, 0))
+        # Botol Potion Dana Darurat di kanan panggung
+        art.draw_potion(P, 335, 368, 125, g.hp_ratio(), kit.HOT, self.t)
+        P.text(335, 226, "POTION HP", 13, kit.INK)
 
-    def _release(self, _e):
-        self.lbl.pack_configure(pady=(0, 4))
-        if self.command:
-            self.command()
+        # Kartu Target Boss
+        bosses_active = [b for b in d["bosses"] if not b["defeated"]]
+        if bosses_active:
+            target_b = next((b for b in bosses_active if b["id"] == self.selected_boss_id), bosses_active[0])
+            P.rect(404, 240, 164, 96, kit.LILAC, kit.INK, 3, "dyn", r=12, sh=4)
+            P.text(486, 262, "TARGET BOSS", 13, kit.INK)
+            P.text(486, 288, target_b["nama"][:15], 15, kit.INK)
+            P.text(486, 314, kit.rupiah(target_b["harga"]), 13, kit.INK)
 
+        status, scol = g.status()
+        P.text(44, 408, f"{d['nama'].upper()} · Lv.{d['level']} [{g.title()}]", 19, kit.INK, "w")
+        P.text(44, 436, f"HP DANA DARURAT ({g.hp_percent()}% · {status})", 15, scol, "w")
+        P.bar(44, 454, 540, 26, g.hp_ratio(), kit.GREEN if g.hp_ratio() >= 0.6 else (kit.YELLOW if g.hp_ratio() >= 0.3 else kit.RED))
+        P.text(44, 492, f"Saldo: {kit.rupiah(d['saldo'])} / {kit.rupiah(d['target'])}", 15, kit.INK, "w")
 
-class ScrollFrame(tk.Frame):
-    """Frame yang bisa di-scroll (untuk daftar boss)."""
+        P.text(44, 520, f"XP: {d['xp']} / {g.xp_needed()}", 15, kit.INK, "w")
+        P.bar(44, 538, 540, 20, d["xp"] / max(1, g.xp_needed()), kit.BLUE)
 
-    def __init__(self, master, height=300):
-        super().__init__(master, bg=C["panel"])
-        self.canvas = tk.Canvas(self, bg=C["panel"], highlightthickness=0, height=height)
-        self.scroll = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.inner = tk.Frame(self.canvas, bg=C["panel"])
-        self.inner.bind("<Configure>",
-                        lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
-        self.canvas.bind("<Configure>",
-                         lambda e: self.canvas.itemconfigure(self.win, width=e.width))
-        self.canvas.configure(yscrollcommand=self.scroll.set)
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.scroll.pack(side="right", fill="y")
-        self.bind("<Enter>", self._bind_wheel)
-        self.bind("<Leave>", self._unbind_wheel)
-
-    def _bind_wheel(self, _e):
-        self.canvas.bind_all("<MouseWheel>", self._wheel)
-        self.canvas.bind_all("<Button-4>", lambda e: self.canvas.yview_scroll(-1, "units"))
-        self.canvas.bind_all("<Button-5>", lambda e: self.canvas.yview_scroll(1, "units"))
-
-    def _unbind_wheel(self, _e):
-        self.canvas.unbind_all("<MouseWheel>")
-        self.canvas.unbind_all("<Button-4>")
-        self.canvas.unbind_all("<Button-5>")
-
-    def _wheel(self, e):
-        self.canvas.yview_scroll(-1 if e.delta > 0 else 1, "units")
-
-
-def _center_on(win, parent):
-    win.update_idletasks()
-    x = parent.winfo_x() + (parent.winfo_width() - win.winfo_width()) // 2
-    y = parent.winfo_y() + (parent.winfo_height() - win.winfo_height()) // 2
-    win.geometry(f"+{max(0, x)}+{max(0, y)}")
-
-
-def _make_modal(win, parent):
-    win.transient(parent)
-    _center_on(win, parent)
-    try:
-        win.wait_visibility()
-        win.grab_set()
-    except tk.TclError:
-        pass
-    parent.wait_window(win)
-
-
-class FormDialog(tk.Toplevel):
-    """Form input bergaya game. Hasil ada di .result (dict) atau None jika batal."""
-
-    def __init__(self, parent, title, fields, ok_text="OK",
-                 ok_color=None, ok_dark=None, subtitle=""):
-        super().__init__(parent)
-        self.configure(bg=C["border"], padx=4, pady=4)
-        self.title(title)
-        self.resizable(False, False)
-        self.result = None
-        self.fields = fields
-        self.vars = {}
-
-        body = tk.Frame(self, bg=C["panel"], padx=20, pady=16)
-        body.pack()
-        tk.Label(body, text=title, bg=C["panel"], fg=C["yellow"], font=pf(16)).pack(anchor="w")
-        if subtitle:
-            tk.Label(body, text=subtitle, bg=C["panel"], fg=C["muted"], font=pf(10),
-                     wraplength=400, justify="left").pack(anchor="w", pady=(4, 0))
-
-        first_entry = None
-        for fl in fields:
-            tk.Label(body, text=fl["label"], bg=C["panel"], fg=C["text"],
-                     font=pf(11)).pack(anchor="w", pady=(10, 2))
-            var = tk.StringVar(value=fl.get("default", ""))
-            self.vars[fl["key"]] = var
-            if fl.get("kind") == "choice":
-                var.set(fl["choices"][0])
-                om = tk.OptionMenu(body, var, *fl["choices"])
-                om.config(bg=C["panel_dark"], fg=C["yellow"], font=pf(11), relief="flat",
-                          highlightthickness=3, highlightbackground=C["border"],
-                          activebackground=C["gray_d"], activeforeground=C["yellow"],
-                          anchor="w", width=34)
-                om["menu"].config(bg=C["panel_dark"], fg=C["text"], font=pf(11))
-                om.pack(fill="x")
-            else:
-                e = tk.Entry(body, textvariable=var, width=36, font=pf(13),
-                             bg=C["panel_dark"], fg=C["yellow"],
-                             insertbackground=C["yellow"], relief="flat",
-                             highlightthickness=3, highlightbackground=C["border"],
-                             highlightcolor=C["yellow_d"])
-                e.pack(fill="x", ipady=4)
-                if first_entry is None:
-                    first_entry = e
-
-        self.err = tk.Label(body, text="", bg=C["panel"], fg=C["red"], font=pf(10),
-                            wraplength=400, justify="left")
-        self.err.pack(anchor="w", pady=(8, 0))
-
-        btns = tk.Frame(body, bg=C["panel"])
-        btns.pack(pady=(10, 0))
-        PixelButton(btns, "BATAL", self.destroy, C["gray"], C["gray_d"], width=10).pack(side="left", padx=6)
-        PixelButton(btns, ok_text, self._ok, ok_color or C["green"], ok_dark or C["green_d"],
-                    width=14).pack(side="left", padx=6)
-
-        self.bind("<Return>", lambda e: self._ok())
-        self.bind("<Escape>", lambda e: self.destroy())
-        if first_entry:
-            first_entry.focus_set()
-            first_entry.select_range(0, "end")
-        _make_modal(self, parent)
-
-    def _ok(self):
-        out = {}
-        for fl in self.fields:
-            val = self.vars[fl["key"]].get().strip()
-            kind = fl.get("kind", "text")
-            if kind == "money":
-                n = parse_rupiah(val)
-                if n is None or (n == 0 and not fl.get("allow_zero")):
-                    self.err.config(text=f"'{fl['label']}' harus berupa angka lebih dari 0.")
-                    return
-                out[fl["key"]] = n
-            elif kind == "text":
-                if fl.get("required") and not val:
-                    self.err.config(text=f"'{fl['label']}' tidak boleh kosong.")
-                    return
-                out[fl["key"]] = val
-            else:
-                out[fl["key"]] = val
-        self.result = out
-        self.destroy()
-
-
-def show_popup(parent, title, message, sprite, palette, color, dark, scale=6, btn="OK"):
-    """Popup besar untuk Level Up / Boss Defeated / Game Over."""
-    win = tk.Toplevel(parent)
-    win.configure(bg=C["border"], padx=4, pady=4)
-    win.title(title)
-    win.resizable(False, False)
-    body = tk.Frame(win, bg=C["panel"], padx=30, pady=20)
-    body.pack()
-    cw = len(sprite[0]) * scale + 10
-    ch = len(sprite) * scale + 10
-    cv = tk.Canvas(body, width=cw, height=ch, bg=C["panel"], highlightthickness=0)
-    cv.pack()
-    draw_sprite(cv, 5, 5, sprite, palette, scale)
-    tk.Label(body, text=title, bg=C["panel"], fg=color, font=pf(22)).pack(pady=(8, 4))
-    tk.Label(body, text=message, bg=C["panel"], fg=C["text"], font=pf(11),
-             wraplength=380, justify="center").pack(pady=(0, 12))
-    PixelButton(body, btn, win.destroy, color, dark, width=14,
-                fg="#14172e" if color == C["yellow"] else "#ffffff").pack()
-    win.bind("<Return>", lambda e: win.destroy())
-    win.bind("<Escape>", lambda e: win.destroy())
-    _make_modal(win, parent)
-
-
-# ----------------------------------------------------------------------
-# APLIKASI UTAMA
-# ----------------------------------------------------------------------
-SCENE_W, SCENE_H = 340, 150
-
-HINTS = {
-    "SEHAT": "HP dompet aman. Pertahankan, dan serang boss wishlist-mu!",
-    "WASPADA": "HP mulai menipis. Tahan jajan dulu dan isi Dana Darurat.",
-    "KRITIS": "HP KRITIS! Prioritaskan Dana Darurat sebelum jajan lagi.",
-    "GAME OVER": "Dana Darurat habis. Mulai lagi dengan menabung (HEAL).",
-}
-
-
-class SaveQuestApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("SaveQuest - Simulator Tabungan RPG")
-        self.configure(bg=C["bg"])
-        self.geometry("1000x740")
-        self.resizable(False, False)
-
-        self.game = GameState()
-        self._bob_up = False
-        self._ft_id = 0
-        self.stars = []
-
-        self.build_header()
-        self.build_actions()
-        mid = tk.Frame(self, bg=C["bg"])
-        mid.pack(fill="both", expand=True, padx=12)
-        self.build_hero_panel(mid)
-        self.build_boss_panel(mid)
-        self.build_log_panel()
-
-        self.draw_scene()
-        self.refresh()
-        self.after(600, self.tick)
-        self.after(400, self.first_run)
-
-    # ---------- layout ----------
-    def make_panel(self, parent, title):
-        outer = tk.Frame(parent, bg=C["border"], padx=4, pady=4)
-        inner = tk.Frame(outer, bg=C["panel"])
-        inner.pack(fill="both", expand=True)
-        tk.Label(inner, text=" " + title, bg=C["blue_d"], fg="#ffffff", font=pf(11),
-                 anchor="w", pady=3).pack(fill="x")
-        body = tk.Frame(inner, bg=C["panel"], padx=10, pady=8)
-        body.pack(fill="both", expand=True)
-        return outer, body
-
-    def build_header(self):
-        h = tk.Canvas(self, width=1000, height=72, bg=C["panel_dark"], highlightthickness=0)
-        h.pack(fill="x")
-        draw_sprite(h, 24, 18, STAR, PAL, 4)
-        draw_sprite(h, 940, 18, STAR, PAL, 4)
-        draw_sprite(h, 90, 22, COIN, PAL, 4)
-        draw_sprite(h, 880, 22, COIN, PAL, 4)
-        h.create_text(503, 28, text="SAVEQUEST", font=pf(30), fill=C["yellow_d"])
-        h.create_text(500, 25, text="SAVEQUEST", font=pf(30), fill=C["yellow"])
-        h.create_text(500, 56, text="Dana Darurat & Wishlist Gadget", font=pf(11), fill=C["muted"])
-
-    def build_actions(self):
-        row = tk.Frame(self, bg=C["bg"])
-        row.pack(pady=10)
-        PixelButton(row, "+ TABUNG (HEAL)", self.on_save, C["green"], C["green_d"]).pack(side="left", padx=5)
-        PixelButton(row, "- JAJAN (DAMAGE)", self.on_spend, C["red"], C["red_d"]).pack(side="left", padx=5)
-        PixelButton(row, "+ BOSS BARU", self.on_add_boss, C["blue"], C["blue_d"]).pack(side="left", padx=5)
-        PixelButton(row, "PENGATURAN", self.on_settings, C["yellow"], C["yellow_d"],
-                    fg="#14172e").pack(side="left", padx=5)
-        PixelButton(row, "RESET", self.on_reset, C["gray"], C["gray_d"], width=8).pack(side="left", padx=5)
-
-    def build_hero_panel(self, parent):
-        outer, body = self.make_panel(parent, "HERO STATUS")
-        outer.pack(side="left", fill="y", padx=(0, 8))
-
-        self.scene = tk.Canvas(body, width=SCENE_W, height=SCENE_H, bg="#12163a",
-                               highlightthickness=4, highlightbackground=C["border"])
-        self.scene.pack()
-
-        self.lbl_name = tk.Label(body, bg=C["panel"], fg=C["yellow"], font=pf(12))
-        self.lbl_name.pack(anchor="w", pady=(8, 2))
-
-        hp_row = tk.Frame(body, bg=C["panel"])
-        hp_row.pack(anchor="w", pady=2)
-        tk.Label(hp_row, text="HP", bg=C["panel"], fg=C["red"], font=pf(13), width=3).pack(side="left")
-        self.hp_bar = PixelBar(hp_row, width=240, height=26)
-        self.hp_bar.pack(side="left", padx=4)
-        self.lbl_hp = tk.Label(hp_row, bg=C["panel"], fg=C["text"], font=pf(11), width=5)
-        self.lbl_hp.pack(side="left")
-
-        self.hearts = tk.Canvas(body, width=5 * 41, height=36, bg=C["panel"], highlightthickness=0)
-        self.hearts.pack(anchor="w", pady=2)
-
-        self.lbl_saldo = tk.Label(body, bg=C["panel"], fg=C["text"], font=pf(10))
-        self.lbl_saldo.pack(anchor="w")
-        self.lbl_status = tk.Label(body, bg=C["panel"], font=pf(12))
-        self.lbl_status.pack(anchor="w", pady=(2, 4))
-
-        xp_row = tk.Frame(body, bg=C["panel"])
-        xp_row.pack(anchor="w", pady=2)
-        tk.Label(xp_row, text="XP", bg=C["panel"], fg=C["blue"], font=pf(13), width=3).pack(side="left")
-        self.xp_bar = PixelBar(xp_row, width=240, height=20, color=C["blue"])
-        self.xp_bar.pack(side="left", padx=4)
-        self.lbl_xp = tk.Label(xp_row, bg=C["panel"], fg=C["text"], font=pf(9), width=8)
-        self.lbl_xp.pack(side="left")
-
-        self.lbl_hint = tk.Label(body, bg=C["panel"], fg=C["muted"], font=pf(9),
-                                 wraplength=340, justify="left")
-        self.lbl_hint.pack(anchor="w", pady=(6, 0))
-
-    def build_boss_panel(self, parent):
-        outer, body = self.make_panel(parent, "BOSS WISHLIST GADGET")
-        outer.pack(side="left", fill="both", expand=True)
-        self.boss_scroll = ScrollFrame(body, height=360)
-        self.boss_scroll.pack(fill="both", expand=True)
-
-    def build_log_panel(self):
-        outer, body = self.make_panel(self, "BATTLE LOG")
-        outer.pack(fill="x", padx=12, pady=(8, 12))
-        wrap = tk.Frame(body, bg=C["panel"])
-        wrap.pack(fill="x")
-        self.log = tk.Text(wrap, height=6, bg=C["panel_dark"], fg=C["text"], font=pf(10),
-                           relief="flat", wrap="word", state="disabled",
-                           highlightthickness=3, highlightbackground=C["border"])
-        sb = tk.Scrollbar(wrap, command=self.log.yview)
-        self.log.config(yscrollcommand=sb.set)
-        self.log.pack(side="left", fill="x", expand=True)
-        sb.pack(side="right", fill="y")
-        self.log.tag_config("heal", foreground=C["green"])
-        self.log.tag_config("damage", foreground=C["red"])
-        self.log.tag_config("boss", foreground=C["pink"])
-        self.log.tag_config("levelup", foreground=C["yellow"])
-        self.log.tag_config("info", foreground=C["muted"])
-
-    # ---------- scene animasi ----------
-    def draw_scene(self):
-        c = self.scene
-        c.delete("all")
-        W, H = SCENE_W, SCENE_H
-        c.create_rectangle(0, 0, W, H, fill="#12163a", outline="")
-        rnd = random.Random(7)
-        self.stars = []
-        for _ in range(25):
-            x, y, s = rnd.randint(4, W - 4), rnd.randint(4, 60), rnd.choice((2, 2, 3))
-            self.stars.append(c.create_rectangle(x, y, x + s, y + s, fill="#ffffff", outline=""))
-        x = 0
-        while x < W:
-            bw, bh = rnd.randint(28, 50), rnd.randint(40, 90)
-            top = H - 30 - bh
-            c.create_rectangle(x, top, x + bw, H - 30, fill="#1d2350", outline=C["border"], width=2)
-            for wy in range(top + 8, H - 42, 12):
-                for wx in range(x + 6, x + bw - 8, 10):
-                    if rnd.random() < 0.45:
-                        c.create_rectangle(wx, wy, wx + 4, wy + 5, fill="#ffd95a", outline="")
-            x += bw + rnd.randint(2, 6)
-        c.create_rectangle(0, H - 30, W, H, fill="#3b2f4a", outline="")
-        c.create_rectangle(0, H - 30, W, H - 26, fill="#5a4a6a", outline="")
-        self.draw_hero()
-
-    def draw_hero(self):
-        c = self.scene
-        c.delete("hero")
-        cx = SCENE_W // 2
-        if self.game.data["setup_done"] and self.game.data["saldo"] <= 0:
-            draw_sprite(c, cx - 27, SCENE_H - 30 - 54 + 4, SKULL, PAL, 6, tags="hero")
+        P.text(44, 574, "BATTLE LOG TERBARU:", 14, kit.INK, "w")
+        recent = list(reversed(d["log"][-3:]))
+        if not recent:
+            P.text(44, 598, "Belum ada transaksi. Klik + TABUNG atau - JAJAN!", 13, "#6f6580", "w")
         else:
-            pal = dict(PAL)
-            if self.game.hp_ratio() < 0.3:
-                pal["B"] = C["gray"]
-                pal["S"] = "#c9b8a8"
-            draw_sprite(c, cx - 20, SCENE_H - 30 - 56 + 4, HERO, pal, 4, tags="hero")
-        self._bob_up = False
+            for idx, item in enumerate(recent):
+                P.text(44, 598 + idx * 22, f"[{item['waktu']}] {item['teks'][:58]}", 13, kit.INK, "w")
 
-    def tick(self):
-        """Animasi ringan: bintang berkedip & hero naik-turun."""
-        for sid in random.sample(self.stars, min(5, len(self.stars))):
-            cur = self.scene.itemcget(sid, "fill")
-            self.scene.itemconfig(sid, fill="#5a6090" if cur == "#ffffff" else "#ffffff")
-        self.scene.move("hero", 0, 2 if self._bob_up else -2)
-        self._bob_up = not self._bob_up
-        self.after(600, self.tick)
+        # Panel Kanan: Boss Wishlist Gadget
+        P.window(620, 118, 636, 550, "BOSS_WISHLIST.exe", kit.LILAC, kit.CREAM, tags="dyn")
+        if not d["bosses"]:
+            P.text(938, 355, "Belum ada Boss Wishlist.\nKlik '+ BOSS' di atas untuk menambah gadget!", 18, "#6f6580", "center", justify="center")
+        else:
+            for i, b in enumerate(d["bosses"][:5]):
+                by = 166 + i * 96
+                prog = min(1.0, b["terkumpul"] / b["harga"]) if b["harga"] else 1.0
+                P.rect(640, by, 596, 86, kit.WHITE, kit.INK, 3, "dyn", r=12, sh=3)
+                tag_txt = " [DEFEATED]" if b["defeated"] else ""
+                P.text(654, by + 18, f"{b['nama']}{tag_txt}", 16, kit.INK, "w")
+                P.text(654, by + 38, f"{kit.rupiah(b['terkumpul'])} / {kit.rupiah(b['harga'])} ({int(prog * 100)}%)", 13, "#5a4f6e", "w")
+                P.bar(654, by + 54, 380, 20, prog, kit.GOLD if b["defeated"] else kit.HOT)
+                if not b["defeated"]:
+                    self.button(1048, by + 16, 84, 28, "SERANG", kit.MINT, lambda bid=b["id"]: self.open_save(bid), 13)
+                self.button(1140, by + 16, 82, 28, "HAPUS", kit.GRAY, lambda bid=b["id"]: self.remove_boss(bid), 12)
 
-    def float_text(self, text, color):
-        c = self.scene
-        self._ft_id += 1
-        tag = f"ft{self._ft_id}"
-        c.create_text(SCENE_W // 2 + 1, 61, text=text, fill="#000000", font=pf(15), tags=(tag, "float"))
-        c.create_text(SCENE_W // 2, 60, text=text, fill=color, font=pf(15), tags=(tag, "float"))
+        self.parts.draw(P)
 
-        def step(n=0):
-            if n >= 30:
-                c.delete(tag)
-                return
-            c.move(tag, 0, -2)
-            self.after(35, step, n + 1)
-        step()
-
-    def flash_scene(self, color):
-        r = self.scene.create_rectangle(0, 0, SCENE_W, SCENE_H, fill=color, outline="",
-                                        stipple="gray50")
-        self.scene.tag_raise("float")
-        self.after(160, lambda: self.scene.delete(r))
-
-    # ---------- refresh tampilan ----------
-    def refresh(self):
-        g, d = self.game, self.game.data
-        status, scolor = g.status()
-        ratio = g.hp_ratio()
-        hp_color = C["green"] if ratio >= 0.6 else (C["yellow"] if ratio >= 0.3 else C["red"])
-
-        self.lbl_name.config(text=f"{d['nama'].upper()}  Lv.{d['level']}  [{g.title()}]")
-        self.hp_bar.set(ratio, hp_color)
-        self.lbl_hp.config(text=f"{g.hp_percent()}%")
-        self.lbl_saldo.config(text=f"Dana Darurat: {rupiah(d['saldo'])} / {rupiah(d['target'])}")
-        self.lbl_status.config(text=f"STATUS: {status}", fg=scolor)
-        self.xp_bar.set(d["xp"] / g.xp_needed())
-        self.lbl_xp.config(text=f"{d['xp']}/{g.xp_needed()}")
-        self.lbl_hint.config(text=HINTS[status])
-
-        self.hearts.delete("all")
-        full = math.ceil(ratio * 5 - 1e-9) if ratio > 0 else 0
-        for i in range(5):
-            pal = PAL if i < full else PAL_EMPTY_HEART
-            draw_sprite(self.hearts, 2 + i * 41, 1, HEART, pal, 3)
-
-        self.draw_hero()
-        self.refresh_bosses()
-        self.refresh_log()
-
-    def refresh_bosses(self):
-        inner = self.boss_scroll.inner
-        for w in inner.winfo_children():
-            w.destroy()
-        bosses = self.game.data["bosses"]
-        if not bosses:
-            cv = tk.Canvas(inner, width=60, height=60, bg=C["panel"], highlightthickness=0)
-            cv.pack(pady=(30, 6))
-            draw_sprite(cv, 2, 8, MONSTER, dict(PAL, R=C["gray"]), 5)
-            tk.Label(inner, text="Belum ada boss.\nKlik '+ BOSS BARU' untuk menambah\nwishlist gadget impianmu!",
-                     bg=C["panel"], fg=C["muted"], font=pf(11), justify="center").pack()
-            return
-
-        for i, b in enumerate(bosses):
-            color = BOSS_COLORS[i % len(BOSS_COLORS)]
-            card = tk.Frame(inner, bg=C["border"], padx=3, pady=3)
-            card.pack(fill="x", padx=6, pady=4)
-            body = tk.Frame(card, bg=C["panel_dark"])
-            body.pack(fill="x")
-
-            sp = tk.Canvas(body, width=52, height=48, bg=C["panel_dark"], highlightthickness=0)
-            sp.grid(row=0, column=0, rowspan=3, padx=8, pady=6)
-            draw_sprite(sp, 4, 4, MONSTER, dict(PAL, R=C["gray"] if b["defeated"] else color), 4)
-
-            title = b["nama"] + ("  [DEFEATED]" if b["defeated"] else "")
-            tk.Label(body, text=title, bg=C["panel_dark"],
-                     fg=C["yellow"] if b["defeated"] else C["text"],
-                     font=pf(12), anchor="w").grid(row=0, column=1, sticky="w")
-
-            progress = min(1.0, b["terkumpul"] / b["harga"]) if b["harga"] else 1.0
-            bar = PixelBar(body, width=230, height=18, color=color, bg=C["panel_dark"])
-            bar.set(1.0 - progress)
-            bar.grid(row=1, column=1, sticky="w")
-
-            tk.Label(body, text=f"{rupiah(b['terkumpul'])} / {rupiah(b['harga'])}  (HP boss {int((1 - progress) * 100)}%)",
-                     bg=C["panel_dark"], fg=C["muted"], font=pf(9),
-                     anchor="w").grid(row=2, column=1, sticky="w", pady=(0, 4))
-
-            btns = tk.Frame(body, bg=C["panel_dark"])
-            btns.grid(row=0, column=2, rowspan=3, padx=8)
-            if not b["defeated"]:
-                PixelButton(btns, "SERANG", lambda bid=b["id"]: self.on_save(bid),
-                            C["green"], C["green_d"], font_size=9, width=7).pack(pady=2)
-            PixelButton(btns, "HAPUS", lambda bid=b["id"]: self.on_remove_boss(bid),
-                        C["red"], C["red_d"], font_size=9, width=7).pack(pady=2)
-            body.grid_columnconfigure(1, weight=1)
-
-    def refresh_log(self):
-        self.log.config(state="normal")
-        self.log.delete("1.0", "end")
-        for e in reversed(self.game.data["log"][-60:]):
-            self.log.insert("end", f"[{e['waktu']}] {e['teks']}\n", e["tipe"])
-        self.log.config(state="disabled")
-        self.log.see("1.0")
-
-    # ---------- aksi pengguna ----------
-    def first_run(self):
-        if not self.game.data["setup_done"]:
-            self.open_setup(first=True)
-
-    def open_setup(self, first=False):
-        d = self.game.data
-        res = FormDialog(
-            self, "SELAMAT DATANG!" if first else "PENGATURAN",
-            [
-                {"key": "nama", "label": "Nama pahlawan", "default": d["nama"], "required": True},
-                {"key": "target", "label": "Target Dana Darurat (Rp)", "kind": "money",
-                 "default": str(d["target"])},
-                {"key": "saldo", "label": "Saldo Dana Darurat saat ini (Rp)", "kind": "money",
-                 "allow_zero": True, "default": str(d["saldo"])},
-            ],
-            ok_text="MULAI" if first else "SIMPAN",
-            ok_color=C["yellow"], ok_dark=C["yellow_d"],
-            subtitle=("Atur karaktermu. Rekomendasi dana darurat: 3-6x pengeluaran bulanan."
-                      if first else ""),
-        ).result
-        if res:
-            d["nama"] = res["nama"][:16]
-            d["target"] = res["target"]
-            d["saldo"] = res["saldo"]
-        if first:
-            d["setup_done"] = True
-            self.game._log("info", f"Selamat datang di SaveQuest, {d['nama']}! Petualangan dimulai.")
-        self.game.save()
-        self.refresh()
-
-    def on_settings(self):
-        self.open_setup(first=False)
-
-    def on_save(self, boss_id=None):
-        bosses = [b for b in self.game.data["bosses"] if not b["defeated"]]
-        labels = ["Dana Darurat (HP)"] + [f"Boss {i + 1}: {b['nama']}" for i, b in enumerate(bosses)]
+    def open_save(self, boss_id=None):
+        bosses = [b for b in self.app.game.data["bosses"] if not b["defeated"]]
+        labels = ["Dana Darurat (HP)"] + [f"Boss: {b['nama']}" for b in bosses]
         ids = [None] + [b["id"] for b in bosses]
         fields = [
-            {"key": "jumlah", "label": "Jumlah ditabung (Rp)", "kind": "money"},
-            {"key": "ket", "label": "Keterangan (opsional)", "default": "Menabung"},
+            {"key": "jumlah", "label": "Nominal tabungan", "kind": "money", "value": "50000", "hint": "mis. 50000"},
+            {"key": "ket", "label": "Catatan", "kind": "text", "value": "Menabung"},
         ]
         if boss_id is None:
-            fields.append({"key": "tujuan", "label": "Tabung ke mana?", "kind": "choice", "choices": labels})
-        res = FormDialog(self, "MENABUNG (HEAL)", fields, ok_text="HEAL!",
-                         subtitle="Tabungan baru = HP naik + XP bertambah.").result
-        if not res:
-            return
-        if boss_id is None:
-            boss_id = ids[labels.index(res["tujuan"])]
-        events = self.game.add_saving(res["jumlah"], res["ket"], boss_id)
-        self.refresh()
-        if boss_id is None:
-            self.float_text("+" + rupiah(res["jumlah"]), C["green"])
-            self.flash_scene(C["green"])
-            self.hp_bar.flash()
+            fields.append({"key": "tujuan", "label": "Tujuan tabungan", "kind": "choice", "choices": labels})
+
+        def on_ok(r):
+            target_id = boss_id if boss_id is not None else ids[r["tujuan"]]
+            if target_id is not None:
+                self.selected_boss_id = target_id
+                self.trigger_reaction("attack", "zhammm! SERANG!", [kit.YELLOW, kit.SKY, kit.WHITE])
+            else:
+                self.trigger_reaction("cheer", "yaayy^^ +HP!", [kit.MINT, kit.YELLOW, kit.PINK])
+            ev = self.app.game.add_saving(r["jumlah"], r["ket"], target_id)
+            self.app.show_events(ev)
+
+        self.app.dialog = Dialog(
+            self.app, "TABUNG (HEAL)", fields, "HEAL!", kit.MINT, on_ok,
+            "Menabung menambah HP Dana Darurat, XP, atau menyerang Boss."
+        )
+
+    def open_spend(self):
+        def on_ok(r):
+            sfx.play("hit")
+            self.trigger_reaction("hurt", "bhoom!! -HP!", [kit.RED, kit.ORANGE, kit.YELLOW])
+            ev = self.app.game.add_spending(r["jumlah"], r["ket"])
+            self.app.show_events(ev)
+
+        self.app.dialog = Dialog(
+            self.app, "JAJAN IMPULSIF (DAMAGE)",
+            [
+                {"key": "jumlah", "label": "Nominal jajan", "kind": "money", "value": "25000", "hint": "mis. 25000"},
+                {"key": "ket", "label": "Keterangan jajan", "kind": "text", "value": "Jajan impulsif"},
+            ],
+            "TERIMA DAMAGE", kit.RED, on_ok,
+            "Jajan impulsif menurunkan HP Dana Darurat dan XP."
+        )
+
+    def open_add_boss(self):
+        def on_ok(r):
+            self.app.game.add_boss(r["nama"][:24], r["harga"])
+            self.app.toast("Boss wishlist ditambahkan!", kit.SKY)
+
+        self.app.dialog = Dialog(
+            self.app, "TAMBAH BOSS WISHLIST",
+            [
+                {"key": "nama", "label": "Nama gadget / barang", "kind": "text", "required": True, "hint": "Mechanical Keyboard"},
+                {"key": "harga", "label": "Harga target", "kind": "money", "value": "1000000", "hint": "mis. 1000000"},
+            ],
+            "MUNCULKAN", kit.SKY, on_ok,
+            "Kumpulkan tabungan untuk mengalahkan Boss wishlist."
+        )
+
+    def remove_boss(self, boss_id):
+        self.app.game.remove_boss(boss_id)
+        if self.selected_boss_id == boss_id:
+            self.selected_boss_id = None
+        self.app.toast("Boss dihapus.", kit.GRAY)
+
+    def open_settings(self):
+        d = self.app.game.data
+
+        def on_ok(r):
+            d["nama"] = r["nama"][:16]
+            d["target"] = r["target"]
+            d["saldo"] = r["saldo"]
+            d["setup_done"] = True
+            self.app.game.save()
+            self.app.toast("Pengaturan tersimpan!", kit.YELLOW)
+
+        self.app.dialog = Dialog(
+            self.app, "PENGATURAN HERO & DANA DARURAT",
+            [
+                {"key": "nama", "label": "Nama pahlawan", "kind": "text", "required": True, "value": d["nama"]},
+                {"key": "target", "label": "Target dana darurat", "kind": "money", "value": str(d["target"])},
+                {"key": "saldo", "label": "Saldo dana darurat", "kind": "money", "allow_zero": True, "value": str(d["saldo"])},
+            ],
+            "SIMPAN", kit.YELLOW, on_ok
+        )
+
+    def open_reset(self):
+        def on_ok(r):
+            if r["yakin"] == 1:
+                self.app.game.reset()
+                self.selected_boss_id = None
+                self.app.toast("Progres direset.", kit.PINK)
+
+        self.app.dialog = Dialog(
+            self.app, "RESET PROGRES",
+            [{"key": "yakin", "label": "Hapus semua data?", "kind": "choice", "choices": ["Batal", "Ya, reset"]}],
+            "OK", kit.RED, on_ok
+        )
+
+
+# ----------------------------------------------------------------------
+# APLIKASI UTAMA (tk.Tk + LOOP + ROUTER SCREEN + DIALOG/POPUP)
+# ----------------------------------------------------------------------
+class SaveQuestApp(tk.Tk):
+    WIDTH, HEIGHT = 1280, 720
+
+    def __init__(self):
+        super().__init__()
+        self.title("SaveQuest - Y2K Savings RPG")
+        self.configure(bg=kit.INK)
+        self.geometry(f"{self.WIDTH}x{self.HEIGHT}")
+        self.resizable(False, False)
+
+        self.cv = tk.Canvas(self, width=self.WIDTH, height=self.HEIGHT,
+                            bg=kit.CREAM, highlightthickness=0)
+        self.cv.pack(fill="both", expand=True)
+
+        self.P = CanvasPainter(self.cv, self.WIDTH, self.HEIGHT)
+        self.game = GameState()
+        self.dialog = None
+        self.mouse = (0, 0)
+        self.mouse_down = False
+        self._toast_text = ""
+        self._toast_timer = 0.0
+        self._toast_color = kit.YELLOW
+
+        self.screens = {
+            "title": st.TitleScreen(self),
+            "creator": st.CreatorScreen(self),
+            "hub": HubY2K(self),
+        }
+        self.current_screen = self.screens["title"]
+        self.current_screen.enter(boot=True)
+        self.current_screen.draw_static()
+
+        self.cv.bind("<Motion>", self._on_motion)
+        self.cv.bind("<ButtonPress-1>", self._on_press)
+        self.cv.bind("<ButtonRelease-1>", self._on_release)
+        self.bind("<KeyPress>", self._on_key)
+
+        self._last_time = time.perf_counter()
+        self._loop()
+
+    def goto(self, name, **kw):
+        self.cv.delete("all")
+        self.current_screen = self.screens[name]
+        self.current_screen.enter(**kw)
+        self.current_screen.draw_static()
+
+    def start_game(self):
+        if not self.game.data.get("setup_done"):
+            self.goto("creator", first=True)
         else:
-            self.float_text("BOSS HIT!", C["pink"])
-            self.flash_scene(C["pink"])
-        self.process_events(events)
+            self.goto("hub")
 
-    def on_spend(self):
-        res = FormDialog(
-            self, "JAJAN IMPULSIF (DAMAGE)",
-            [
-                {"key": "jumlah", "label": "Jumlah jajan (Rp)", "kind": "money"},
-                {"key": "ket", "label": "Beli apa?", "default": "Jajan impulsif"},
-            ],
-            ok_text="TERIMA DAMAGE", ok_color=C["red"], ok_dark=C["red_d"],
-            subtitle="Jajan impulsif memotong Dana Darurat dan XP-mu.",
-        ).result
-        if not res:
-            return
-        events = self.game.add_spending(res["jumlah"], res["ket"])
-        self.refresh()
-        self.float_text("-" + rupiah(res["jumlah"]), C["red"])
-        self.flash_scene(C["red"])
-        self.hp_bar.flash()
-        self.process_events(events)
+    def quit_app(self):
+        self.destroy()
 
-    def on_add_boss(self):
-        res = FormDialog(
-            self, "BOSS BARU",
-            [
-                {"key": "nama", "label": "Nama gadget impian", "required": True},
-                {"key": "harga", "label": "Harga (Rp)", "kind": "money"},
-            ],
-            ok_text="MUNCULKAN", ok_color=C["blue"], ok_dark=C["blue_d"],
-            subtitle="Tiap gadget wishlist menjadi boss. Kumpulkan uang untuk mengalahkannya!",
-        ).result
-        if res:
-            self.game.add_boss(res["nama"][:24], res["harga"])
-            self.refresh()
+    def toast(self, msg, color=kit.YELLOW, duration=2.4):
+        self._toast_text = msg
+        self._toast_color = color
+        self._toast_timer = duration
 
-    def on_remove_boss(self, boss_id):
-        from tkinter import messagebox
-        if messagebox.askyesno("Hapus boss", "Hapus boss ini dari wishlist?\n"
-                                             "Uang yang sudah terkumpul tidak akan dihitung lagi."):
-            self.game.remove_boss(boss_id)
-            self.refresh()
-
-    def on_reset(self):
-        from tkinter import messagebox
-        if messagebox.askyesno("Reset game", "Semua data (saldo, level, boss, riwayat) akan dihapus.\nLanjut?"):
-            self.game.reset()
-            self.refresh()
-            self.open_setup(first=True)
-
-    def process_events(self, events):
+    def show_events(self, events):
         for kind, payload in events:
             if kind == "boss_defeated":
-                show_popup(self, "BOSS DEFEATED!",
-                           f"Dana untuk {payload['nama']} sudah terkumpul!\n"
-                           "Bonus +150 XP. Beli dengan bijak dan pastikan Dana Darurat tetap aman.",
-                           MONSTER, dict(PAL, R=C["gray"]), C["pink"], C["pink_d"], scale=7, btn="MANTAP!")
+                self.dialog = Popup(
+                    self, "BOSS DEFEATED!",
+                    f"Target {payload['nama']} tercapai! Bonus +150 XP.",
+                    art=None, color=kit.GOLD, btn="MANTAP!", sound="lvl"
+                )
             elif kind == "level_up":
-                show_popup(self, "LEVEL UP!",
-                           f"Sekarang kamu Lv.{payload}\nGelar: {self.game.title()}",
-                           STAR, PAL, C["yellow"], C["yellow_d"], scale=8, btn="LANJUT")
+                self.dialog = Popup(
+                    self, "LEVEL UP!",
+                    f"Naik ke Lv.{payload}! Gelar: {self.game.title()}.",
+                    art=None, color=kit.YELLOW, btn="LANJUT", sound="lvl"
+                )
             elif kind == "game_over":
-                show_popup(self, "GAME OVER",
-                           "HP habis! Dana Darurat kosong.\nSaatnya bangkit: mulai menabung lagi.",
-                           SKULL, PAL, C["red"], C["red_d"], scale=8, btn="BANGKIT")
+                self.dialog = Popup(
+                    self, "GAME OVER",
+                    "Dana Darurat habis! Ayo mulai menabung lagi.",
+                    art=None, color=kit.RED, btn="BANGKIT", sound="lvl"
+                )
+
+    def _on_motion(self, e):
+        self.mouse = (e.x, e.y)
+
+    def _on_press(self, e):
+        self.mouse = (e.x, e.y)
+        self.mouse_down = True
+        if self.dialog is not None:
+            self.dialog.click(e.x, e.y)
+            return
+        self.current_screen.click(e.x, e.y)
+
+    def _on_release(self, e):
+        self.mouse = (e.x, e.y)
+        self.mouse_down = False
+
+    def _on_key(self, e):
+        if self.dialog is not None:
+            self.dialog.on_key(e.keysym, e.char)
+            return
+        self.current_screen.on_key(e.keysym, e.char)
+
+    def _loop(self):
+        now = time.perf_counter()
+        dt = min(0.05, max(0.001, now - self._last_time))
+        self._last_time = now
+
+        if self._toast_timer > 0:
+            self._toast_timer = max(0.0, self._toast_timer - dt)
+
+        self.current_screen.update(dt)
+        self.cv.delete("dyn")
+        self.current_screen.hits = []
+        self.current_screen.draw()
+
+        if self.dialog is not None:
+            self.dialog.draw(dt)
+
+        if self._toast_timer > 0 and self._toast_text:
+            self.P.rect(340, 26, 600, 42, self._toast_color, kit.INK, 3, "dyn", r=16, sh=4)
+            self.P.text(640, 47, self._toast_text, 16, kit.INK, tags="dyn")
+
+        self.after(16, self._loop)
 
 
 if __name__ == "__main__":
