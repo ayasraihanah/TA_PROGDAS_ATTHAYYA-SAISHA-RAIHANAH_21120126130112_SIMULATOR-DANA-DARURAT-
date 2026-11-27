@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 art.py - Semua gambar vektor SaveQuest: karakter chibi yang bisa dikustom,
-5 jenis boss, pemandangan, botol potion, balon bicara.
+5 jenis boss, karakter boss chibi Y2K, pemandangan, botol potion, balon bicara.
 Gaya: tepi tinta tebal, warna flat pastel, mata besar ala ilustrasi Y2K.
 Semua karakter & monster ini ORIGINAL (bukan tiruan karakter yang sudah ada).
 """
@@ -473,6 +473,77 @@ def draw_boss(P, cx, gy, h, tier, t=0.0, flash=False, hurt=False, tags="dyn", sh
         P.oval(cx, gy, 34 * b.u, 4.5 * b.u, "#000000", "", 0, tags, stipple="gray50")
     _BOSSES[tier["key"]](b)
     return b
+
+
+# ------------------------------------------------------------------ boss karakter (art style chibi Y2K)
+BOSS_TIERS = [
+    dict(key="slime", label="Wishlist Imp", col="#7ad7ff", min_harga=0),
+    dict(key="gremlin", label="Impulse Gremlin", col="#ff8fc0", min_harga=300_000),
+    dict(key="golem", label="Budget Golem", col="#9fe3b4", min_harga=1_000_000),
+    dict(key="demon", label="Splurge Demon", col="#c9a8ff", min_harga=3_000_000),
+    dict(key="dragon", label="Luxury Dragon", col="#ffd86b", min_harga=8_000_000),
+]
+
+BOSS_PRESETS = {
+    "slime": dict(kelas=1, rambut=1, warna_rambut=3, kulit=0, mata=2, baju=3, warna_baju=0, sepatu=0, aksesori=0),
+    "gremlin": dict(kelas=2, rambut=4, warna_rambut=7, kulit=1, mata=5, baju=2, warna_baju=4, sepatu=2, aksesori=0),
+    "golem": dict(kelas=3, rambut=3, warna_rambut=4, kulit=2, mata=0, baju=1, warna_baju=1, sepatu=1, aksesori=0),
+    "demon": dict(kelas=2, rambut=0, warna_rambut=6, kulit=0, mata=3, baju=2, warna_baju=2, sepatu=1, aksesori=4),
+    "dragon": dict(kelas=3, rambut=2, warna_rambut=2, kulit=1, mata=0, baju=0, warna_baju=3, sepatu=1, aksesori=0),
+}
+
+
+def boss_tier_for_price(harga):
+    chosen = BOSS_TIERS[0]
+    for tier in BOSS_TIERS:
+        if harga >= tier["min_harga"]:
+            chosen = tier
+    return chosen
+
+
+def draw_boss_chibi(P, cx, gy, h, harga=0, t=0.0, pose="idle", flash=False, tags="dyn"):
+    """Karakter Boss bergaya chibi Y2K (tepi tinta tebal, mata besar, tanduk/sayap/mahkota)."""
+    tier = boss_tier_for_price(harga)
+    key = tier["key"]
+    cfg = BOSS_PRESETS[key]
+    p = _pose(pose, t)
+    tint = "white" if flash else None
+    c = Ctx(P, cx, gy, h, cfg, -1, p["lean"], p["dy"], tint, tags)
+
+    # Sayap belakang untuk Demon & Dragon
+    if key in ("demon", "dragon"):
+        wcol = "#7a4aa0" if key == "demon" else "#ff8a55"
+        for s in (-1, 1):
+            c.uni([([(s * 10, -54), (s * 34, -76), (s * 42, -56), (s * 34, -50),
+                     (s * 36, -36), (s * 24, -42), (s * 14, -36)], False)], wcol)
+
+    _back(c)
+    _legs(c)
+    _outfit(c)
+    _arms(c, p)
+
+    expr = "hurt" if pose == "hurt" else "angry"
+    _head(c, expr, False)
+    _front(c)
+
+    # Atribut kepala khas tiap tier Boss
+    if key == "slime":
+        c.ln([(0, -96), (4, -108)], INK, 1.4)
+        c.ov(6, -110, 6, 4.2, "#9be26b")
+    elif key == "gremlin":
+        for s in (-1, 1):
+            c.fp([(s * 16, -86), (s * 30, -104), (s * 24, -78)], "#ff8fc0")
+    elif key == "golem":
+        c.fp([(-16, -95), (-10, -106), (-4, -97), (0, -108), (4, -97), (10, -106), (16, -95)], "#9fe3b4")
+    elif key == "demon":
+        for s in (-1, 1):
+            c.fp([(s * 10, -94), (s * 18, -112), (s * 21, -91)], "#ffe9a8")
+    elif key == "dragon":
+        for s in (-1, 1):
+            c.fp([(s * 11, -93), (s * 20, -114), (s * 23, -90)], GOLD)
+        c.star(0, -102, 5.5, YELLOW)
+
+    return tier
 
 
 # ------------------------------------------------------------------ benda & UI kecil
