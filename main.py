@@ -35,8 +35,8 @@ C = {
     "border": "#00051d",
     "text": "#000000",
     "muted": "#02061d",
-    "yellow": "#dcb748",
-    "yellow_d": "#c98f00",
+    "yellow": "#f1d88c",
+    "yellow_d": "#cab273",
     "red": "#ef88a9",
     "red_d": "#b33a74",
     "green": "#63ded4",
@@ -45,8 +45,8 @@ C = {
     "blue_d": "#544587",
     "pink": "#ff6fae",
     "pink_d": "#b53a76",
-    "gray": "#6b7090",
-    "gray_d": "#3f4263",
+    "gray": "#8d92b3",
+    "gray_d": "#6d6f8a",
 }
 FONT_NAME = "Courier New"
 
@@ -496,7 +496,7 @@ class FormDialog(tk.Toplevel):
 
         body = tk.Frame(self, bg=C["panel"], padx=20, pady=16)
         body.pack()
-        tk.Label(body, text=title, bg=C["panel"], fg=C["yellow"], font=pf(16)).pack(anchor="w")
+        tk.Label(body, text=title, bg=C["panel"], fg=C["muted"], font=pf(16)).pack(anchor="w")
         if subtitle:
             tk.Label(body, text=subtitle, bg=C["panel"], fg=C["muted"], font=pf(10),
                      wraplength=400, justify="left").pack(anchor="w", pady=(4, 0))
@@ -667,7 +667,7 @@ class SaveQuestApp(tk.Tk):
                                highlightthickness=4, highlightbackground=C["border"])
         self.scene.pack()
 
-        self.lbl_name = tk.Label(body, bg=C["panel"], fg=C["yellow"], font=pf(12))
+        self.lbl_name = tk.Label(body, bg=C["panel"], fg=C["muted"], font=pf(12))
         self.lbl_name.pack(anchor="w", pady=(8, 2))
 
         hp_row = tk.Frame(body, bg=C["panel"])
@@ -688,8 +688,8 @@ class SaveQuestApp(tk.Tk):
 
         xp_row = tk.Frame(body, bg=C["panel"])
         xp_row.pack(anchor="w", pady=2)
-        tk.Label(xp_row, text="XP", bg=C["panel"], fg=C["blue"], font=pf(13), width=3).pack(side="left")
-        self.xp_bar = PixelBar(xp_row, width=240, height=20, color=C["blue"])
+        tk.Label(xp_row, text="XP", bg=C["panel"], fg=C["muted"], font=pf(13), width=3).pack(side="left")
+        self.xp_bar = PixelBar(xp_row, width=240, height=20, color=C["green"])
         self.xp_bar.pack(side="left", padx=4)
         self.lbl_xp = tk.Label(xp_row, bg=C["panel"], fg=C["text"], font=pf(9), width=8)
         self.lbl_xp.pack(side="left")
