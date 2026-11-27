@@ -22,31 +22,38 @@ import re
 import time
 import tkinter as tk
 from datetime import datetime
+import art
+import dialog
+from dialog import Dialog, Popup
+import kit
+import sfx
+from screens_title import TitleScreen, CreatorScreen
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAVE_FILE = os.path.join(BASE_DIR, "savedata.json")
 
+# ----------------------------------------------------------------------
 # TEMA WARNA & FONT (gaya pixel / retro game)
-
+# ----------------------------------------------------------------------
 C = {
-    "bg": "#D2DFE6",
-    "panel": "#d3bade",
-    "panel_dark": "#4D488A",
-    "border": "#00051d",
-    "text": "#000000",
-    "muted": "#02061d",
-    "yellow": "#f1d88c",
-    "yellow_d": "#cab273",
-    "red": "#ef88a9",
-    "red_d": "#b33a74",
-    "green": "#63ded4",
-    "green_d": "#49b1b3",
-    "blue": "#88b0dd",
-    "blue_d": "#544587",
+    "bg": "#1b1f3b",
+    "panel": "#2a2f5a",
+    "panel_dark": "#14172e",
+    "border": "#0b0d1f",
+    "text": "#f5f0e1",
+    "muted": "#9aa3d6",
+    "yellow": "#ffcc33",
+    "yellow_d": "#c98f00",
+    "red": "#e8433f",
+    "red_d": "#9c1f1f",
+    "green": "#4cc95c",
+    "green_d": "#2a8a38",
+    "blue": "#3f8fe8",
+    "blue_d": "#1f5aa6",
     "pink": "#ff6fae",
     "pink_d": "#b53a76",
-    "gray": "#8d92b3",
-    "gray_d": "#6d6f8a",
+    "gray": "#6b7090",
+    "gray_d": "#3f4263",
 }
 FONT_NAME = "Courier New"
 
@@ -496,7 +503,7 @@ class FormDialog(tk.Toplevel):
 
         body = tk.Frame(self, bg=C["panel"], padx=20, pady=16)
         body.pack()
-        tk.Label(body, text=title, bg=C["panel"], fg=C["muted"], font=pf(16)).pack(anchor="w")
+        tk.Label(body, text=title, bg=C["panel"], fg=C["yellow"], font=pf(16)).pack(anchor="w")
         if subtitle:
             tk.Label(body, text=subtitle, bg=C["panel"], fg=C["muted"], font=pf(10),
                      wraplength=400, justify="left").pack(anchor="w", pady=(4, 0))
@@ -667,7 +674,7 @@ class SaveQuestApp(tk.Tk):
                                highlightthickness=4, highlightbackground=C["border"])
         self.scene.pack()
 
-        self.lbl_name = tk.Label(body, bg=C["panel"], fg=C["muted"], font=pf(12))
+        self.lbl_name = tk.Label(body, bg=C["panel"], fg=C["yellow"], font=pf(12))
         self.lbl_name.pack(anchor="w", pady=(8, 2))
 
         hp_row = tk.Frame(body, bg=C["panel"])
@@ -688,8 +695,8 @@ class SaveQuestApp(tk.Tk):
 
         xp_row = tk.Frame(body, bg=C["panel"])
         xp_row.pack(anchor="w", pady=2)
-        tk.Label(xp_row, text="XP", bg=C["panel"], fg=C["muted"], font=pf(13), width=3).pack(side="left")
-        self.xp_bar = PixelBar(xp_row, width=240, height=20, color=C["green"])
+        tk.Label(xp_row, text="XP", bg=C["panel"], fg=C["blue"], font=pf(13), width=3).pack(side="left")
+        self.xp_bar = PixelBar(xp_row, width=240, height=20, color=C["blue"])
         self.xp_bar.pack(side="left", padx=4)
         self.lbl_xp = tk.Label(xp_row, bg=C["panel"], fg=C["text"], font=pf(9), width=8)
         self.lbl_xp.pack(side="left")
