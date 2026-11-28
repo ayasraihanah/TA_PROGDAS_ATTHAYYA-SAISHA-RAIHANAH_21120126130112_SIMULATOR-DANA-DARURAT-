@@ -88,6 +88,9 @@ class Particles:
     def __init__(self):
         self.items = []
 
+    def clear(self):
+        self.items.clear()
+
     def spawn(self, x, y, kind="spark", colors=None, count=10,
               vx_range=240, vy_up=180, gravity=500, life=0.9, size=9):
         cols = colors or [YELLOW, PINK, MINT, SKY, WHITE]
@@ -149,6 +152,13 @@ class Screen:
     def enter(self, **_kw):
         self.t = 0.0
         self.hits = []
+
+    def leave(self):
+        """Membersihkan area klik dan partikel saat meninggalkan halaman."""
+        self.hits = []
+        parts = getattr(self, "parts", None)
+        if parts is not None:
+            parts.clear()
 
     def update(self, dt):
         self.t += dt

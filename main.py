@@ -387,6 +387,13 @@ class HubY2K(kit.Screen):
         self.boss_say = ""
         self.parts = kit.Particles()
 
+    def leave(self):
+        super().leave()
+        self.pose_timer = 0.0
+        self.speech_timer = 0.0
+        self.hero_pose = "idle"
+        self.boss_pose = "idle"
+
     def update(self, dt):
         super().update(dt)
         self.parts.update(dt)
@@ -417,7 +424,7 @@ class HubY2K(kit.Screen):
 
     def on_key(self, key, _ch):
         if key == "Escape":
-            self.app.goto("title")
+            self.app.go_back(fallback="title")
             return True
         return False
 
@@ -426,15 +433,15 @@ class HubY2K(kit.Screen):
         g, d = self.app.game, self.app.game.data
         self.hits = []
 
-        # Top bar aksi utama
+        # Top bar aksi utama + tombol KEMBALI konsisten
         P.window(24, 18, 1232, 86, "SAVEQUEST_HUB.exe", kit.PINK, kit.CREAM, tags="dyn")
-        self.button(40, 56, 175, 38, "+ TABUNG", kit.MINT, self.open_save, 16)
-        self.button(227, 56, 175, 38, "- JAJAN", kit.RED, self.open_spend, 16)
-        self.button(414, 56, 175, 38, "+ BOSS", kit.SKY, self.open_add_boss, 16)
-        self.button(601, 56, 195, 38, "CUSTOM HERO", kit.LILAC, lambda: self.app.goto("creator"), 15)
-        self.button(808, 56, 185, 38, "PENGATURAN", kit.YELLOW, self.open_settings, 15)
-        self.button(1005, 56, 115, 38, "RESET", kit.GRAY, self.open_reset, 15)
-        self.button(1132, 56, 108, 38, "TITLE", kit.ORANGE, lambda: self.app.goto("title"), 15)
+        self.button(40, 56, 165, 38, "+ TABUNG", kit.MINT, self.open_save, 16)
+        self.button(217, 56, 165, 38, "- JAJAN", kit.RED, self.open_spend, 16)
+        self.button(394, 56, 165, 38, "+ BOSS", kit.SKY, self.open_add_boss, 16)
+        self.button(571, 56, 190, 38, "CUSTOM HERO", kit.LILAC, lambda: self.app.goto("creator"), 15)
+        self.button(773, 56, 180, 38, "PENGATURAN", kit.YELLOW, self.open_settings, 15)
+        self.button(965, 56, 115, 38, "RESET", kit.GRAY, self.open_reset, 15)
+        self.button(1092, 56, 148, 38, "KEMBALI", kit.ORANGE, lambda: self.app.go_back(fallback="title"), 15)
 
         # Panel Kiri: Arena Duel Hero vs Karakter Boss
         P.window(24, 118, 580, 550, "BATTLE_ARENA.exe", kit.SKY, kit.CREAM, tags="dyn")
@@ -480,12 +487,13 @@ class HubY2K(kit.Screen):
             for idx, item in enumerate(recent):
                 P.text(44, 598 + idx * 22, f"[{item['waktu']}] {item['teks'][:58]}", 13, kit.INK, "w")
 
-        # Panel Kanan: Boss Wishlist Gadget + Avatar Karakter Boss
+        # Panel Kanan: Boss Wishlist Gadget (prioritaskan yang aktif + terbaru)
         P.window(620, 118, 636, 550, "BOSS_WISHLIST.exe", kit.LILAC, kit.CREAM, tags="dyn")
         if not d["bosses"]:
             P.text(938, 355, "Belum ada Boss Wishlist.\nKlik '+ BOSS' di atas untuk memunculkan Boss!", 18, "#6f6580", "center", justify="center")
         else:
-            for i, b in enumerate(d["bosses"][:5]):
+            ordered = bosses_active + [b for b in d["bosses"] if b["defeated"]]
+            for i, b in enumerate(ordered[:5]):
                 by = 166 + i * 96
                 prog = min(1.0, b["terkumpul"] / b["harga"]) if b["harga"] else 1.0
                 P.rect(640, by, 596, 86, kit.WHITE, kit.INK, 3, "dyn", sh=3)
@@ -601,7 +609,7 @@ class HubY2K(kit.Screen):
 
 
 # ----------------------------------------------------------------------
-# APLIKASI UTAMA (tk.Tk + SMART DIRTY LOOP + EVENT KLIK INSTAN)
+# APLIKASI UTAMA (tk.Tk + NAVIGATION STACK + POPUP QUEUE + SAFE LOOP)
 # ----------------------------------------------------------------------
 class SaveQuestApp(tk.Tk):
     WIDTH, HEIGHT = 1280, 720
@@ -620,6 +628,7 @@ class SaveQuestApp(tk.Tk):
         self.P = CanvasPainter(self.cv, self.WIDTH, self.HEIGHT)
         self.game = GameState()
         self.dialog = None
+        self._popup_queue = []
         self.mouse = (0, 0)
         self.mouse_down = False
         self._toast_text = ""
@@ -627,6 +636,10 @@ class SaveQuestApp(tk.Tk):
         self._toast_color = kit.YELLOW
         self._dirty = True
         self._last_hover_idx = -1
+        self._last_click_ts = 0.0
+        self._after_id = None
+        self._closing = False
+        self._nav_stack = []
 
         self.screens = {
             "title": st.TitleScreen(self),
@@ -642,6 +655,7 @@ class SaveQuestApp(tk.Tk):
         self.cv.bind("<ButtonPress-1>", self._on_press)
         self.cv.bind("<ButtonRelease-1>", self._on_release)
         self.bind("<KeyPress>", self._on_key)
+        self.protocol("WM_DELETE_WINDOW", self.quit_app)
 
         self._last_time = time.perf_counter()
         self._loop()
@@ -649,7 +663,18 @@ class SaveQuestApp(tk.Tk):
     def mark_dirty(self):
         self._dirty = True
 
+    def _next_popup(self):
+        if self.dialog is None and self._popup_queue:
+            title, msg, color, btn = self._popup_queue.pop(0)
+            self.dialog = Popup(
+                self, title, msg, art=None, color=color, btn=btn,
+                on_close=self._next_popup, sound="lvl"
+            )
+            self._dirty = True
+
     def _redraw(self, dt=0.016):
+        if self._closing:
+            return
         self.cv.delete("dyn")
         self.current_screen.hits = []
         self.current_screen.draw()
@@ -662,13 +687,38 @@ class SaveQuestApp(tk.Tk):
             self.P.text(640, 47, self._toast_text, 16, kit.INK, tags="dyn")
         self._dirty = False
 
-    def goto(self, name, **kw):
+    def goto(self, name, push_history=True, **kw):
+        if name not in self.screens:
+            return
+        prev_name = self.current_screen.name
+        if push_history and prev_name != name:
+            if not self._nav_stack or self._nav_stack[-1] != prev_name:
+                self._nav_stack.append(prev_name)
+                if len(self._nav_stack) > 10:
+                    self._nav_stack.pop(0)
+
+        self.dialog = None
+        self._popup_queue.clear()
+        self.mouse_down = False
+        sfx.clear()
+        self.current_screen.leave()
+
         self.cv.delete("all")
         self._last_hover_idx = -1
         self.current_screen = self.screens[name]
+        if name == "title" and "boot" not in kw:
+            kw["boot"] = False
         self.current_screen.enter(**kw)
         self.current_screen.draw_static()
         self._redraw()
+
+    def go_back(self, fallback="title"):
+        while self._nav_stack:
+            target = self._nav_stack.pop()
+            if target != self.current_screen.name and target in self.screens:
+                self.goto(target, push_history=False)
+                return
+        self.goto(fallback, push_history=False)
 
     def start_game(self):
         if not self.game.data.get("setup_done"):
@@ -677,6 +727,16 @@ class SaveQuestApp(tk.Tk):
             self.goto("hub")
 
     def quit_app(self):
+        if self._closing:
+            return
+        self._closing = True
+        sfx.clear()
+        if self._after_id is not None:
+            try:
+                self.after_cancel(self._after_id)
+            except tk.TclError:
+                pass
+            self._after_id = None
         self.destroy()
 
     def toast(self, msg, color=kit.YELLOW, duration=2.4):
@@ -688,23 +748,27 @@ class SaveQuestApp(tk.Tk):
     def show_events(self, events):
         for kind, payload in events:
             if kind == "boss_defeated":
-                self.dialog = Popup(
-                    self, "BOSS DEFEATED!",
+                self._popup_queue.append((
+                    "BOSS DEFEATED!",
                     f"Target {payload['nama']} tercapai! Bonus +150 XP.",
-                    art=None, color=kit.GOLD, btn="MANTAP!", sound="lvl"
-                )
+                    kit.GOLD,
+                    "MANTAP!",
+                ))
             elif kind == "level_up":
-                self.dialog = Popup(
-                    self, "LEVEL UP!",
+                self._popup_queue.append((
+                    "LEVEL UP!",
                     f"Naik ke Lv.{payload}! Gelar: {self.game.title()}.",
-                    art=None, color=kit.YELLOW, btn="LANJUT", sound="lvl"
-                )
+                    kit.YELLOW,
+                    "LANJUT",
+                ))
             elif kind == "game_over":
-                self.dialog = Popup(
-                    self, "GAME OVER",
-                    "Dana Darurat habis! Ayo mulai menabung lagi.",
-                    art=None, color=kit.RED, btn="BANGKIT", sound="lvl"
-                )
+                self._popup_queue.append((
+                    "GAME OVER",
+                    "Dana Darurat habis! Klik + TABUNG untuk memulihkan HP.",
+                    kit.RED,
+                    "BANGKIT",
+                ))
+        self._next_popup()
         self._dirty = True
 
     def _on_motion(self, e):
@@ -720,6 +784,11 @@ class SaveQuestApp(tk.Tk):
             self._dirty = True
 
     def _on_press(self, e):
+        now = time.perf_counter()
+        # Debounce ringan 60ms agar double-click tidak memicu aksi ganda antarhalaman
+        if now - self._last_click_ts < 0.06:
+            return
+        self._last_click_ts = now
         self.mouse = (e.x, e.y)
         self.mouse_down = True
         if self.dialog is not None:
@@ -729,13 +798,15 @@ class SaveQuestApp(tk.Tk):
             self._redraw()
             return
         self.current_screen.click(e.x, e.y)
+        self.mouse_down = False
         self._dirty = True
         self._redraw()
 
     def _on_release(self, e):
         self.mouse = (e.x, e.y)
-        self.mouse_down = False
-        self._dirty = True
+        if self.mouse_down:
+            self.mouse_down = False
+            self._dirty = True
 
     def _on_key(self, e):
         if self.dialog is not None:
@@ -748,6 +819,8 @@ class SaveQuestApp(tk.Tk):
         self._redraw()
 
     def _loop(self):
+        if self._closing:
+            return
         now = time.perf_counter()
         dt = min(0.08, max(0.001, now - self._last_time))
         self._last_time = now
@@ -769,7 +842,10 @@ class SaveQuestApp(tk.Tk):
         if self._dirty or has_parts or is_boot or has_anim or self._toast_timer > 0 or self.dialog is not None:
             self._redraw(dt)
 
-        self.after(55, self._loop)
+        try:
+            self._after_id = self.after(55, self._loop)
+        except tk.TclError:
+            self._after_id = None
 
 
 if __name__ == "__main__":

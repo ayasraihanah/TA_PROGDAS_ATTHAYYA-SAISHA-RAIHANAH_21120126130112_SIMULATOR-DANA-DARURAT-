@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """dialog.py - Form input & popup bergaya jendela Y2K (digambar di canvas, tanpa widget bawaan)."""
 import sfx
-from kit import (INK, CREAM, PINK, HOT, LILAC, SKY, MINT, YELLOW, WHITE, GRAY, RED, GREEN, lighten, rupiah)
+from kit import (INK, CREAM, PINK, HOT, LILAC, SKY, MINT, YELLOW, WHITE, GRAY, RED, lighten)
 
 
 def grp(digits):
@@ -9,15 +9,15 @@ def grp(digits):
 
 
 def _overlay(P):
-    # Bingkai gelap semi-kontras ringan tanpa stipple GDI yang lambat di Windows
     P.cv.create_rectangle(14, 14, P.pw - 14, P.ph - 14, fill="", outline=INK, width=14, tags="dyn")
 
 
 def _btn(owner, x, y, w, h, label, color, cb, size=22):
     mx, my = owner.app.mouse
     hov = x <= mx <= x + w and y <= my <= y + h
+    pressed = hov and owner.app.mouse_down
     P = owner.P
-    yy = y - (3 if hov else 0)
+    yy = y + (3 if pressed else (-3 if hov else 0))
     P.rect(x, yy, w, h, lighten(color, 0.22) if hov else color, INK, 3.5, "dyn", r=h / 2, sh=5)
     P.rect(x + 9, yy + 5, w - 18, max(4, h * 0.2), lighten(color, 0.6), "", 0, "dyn", r=6)
     P.text(x + w / 2, yy + h / 2 + 1, label, size, INK)
@@ -42,9 +42,11 @@ class Dialog:
                 self.focus = i
                 break
         self.hits, self.err, self.t = [], "", 0.0
+        self._submitted = False
 
     def close(self):
-        self.app.dialog = None
+        if self.app.dialog is self:
+            self.app.dialog = None
         self.app.mark_dirty()
 
     def cancel(self):
@@ -53,22 +55,27 @@ class Dialog:
             self.on_cancel()
 
     def submit(self):
+        if self._submitted:
+            return
         out = {}
         for f in self.fields:
             k, v = f["kind"], f["value"]
             if k == "money":
                 if not v or (int(v) <= 0 and not f.get("allow_zero")):
                     self.err = "'%s' harus berupa angka lebih dari 0." % f["label"]
+                    self.app.mark_dirty()
                     return
                 out[f["key"]] = int(v)
             elif k == "text":
                 v = v.strip()
                 if f.get("required") and not v:
                     self.err = "'%s' tidak boleh kosong." % f["label"]
+                    self.app.mark_dirty()
                     return
                 out[f["key"]] = v
             else:
                 out[f["key"]] = f["idx"]
+        self._submitted = True
         self.close()
         sfx.play("coin")
         if self.on_ok:
@@ -77,6 +84,7 @@ class Dialog:
     def _choice(self, f, d):
         f["idx"] = (f["idx"] + d) % len(f["choices"])
         sfx.play("click")
+        self.app.mark_dirty()
 
     def on_key(self, key, ch):
         f = self.fields[self.focus]
@@ -102,6 +110,7 @@ class Dialog:
             else:
                 f["value"] += ch
         self.err = "" if key not in ("Return", "KP_Enter") else self.err
+        self.app.mark_dirty()
 
     def click(self, x, y):
         for hx, hy, w, h, cb in reversed(self.hits):
@@ -120,7 +129,10 @@ class Dialog:
         H = 190 + len(self.fields) * 92 + (26 if self.subtitle else 0)
         x = (1280 - W) / 2
         y = (720 - H) / 2 + (1 - min(1.0, self.t * 6)) ** 2 * 50
-        bx, by, bw, bh = P.window(x, y, W, H, self.title, self.color)
+        bx, by, bw, _bh = P.window(x, y, W, H, self.title, self.color)
+        # Daftarkan tombol [X] pojok kanan atas jendela agar bisa menutup dialog
+        self.hits.append((x + W - 30, y + 4, 26, 26, self.cancel))
+
         ty = by + 16
         if self.subtitle:
             P.text(bx + 22, ty + 8, self.subtitle, 17, "#6f6580", "w", width=bw - 44)
@@ -165,11 +177,16 @@ class Popup:
         self.app, self.P = app, app.P
         self.title, self.msg, self.art, self.color, self.btn, self.on_close = title, msg, art, color, btn, on_close
         self.t, self.hits = 0.0, []
+        self._closed = False
         if sound:
             sfx.play(sound)
 
     def close(self):
-        self.app.dialog = None
+        if self._closed:
+            return
+        self._closed = True
+        if self.app.dialog is self:
+            self.app.dialog = None
         self.app.mark_dirty()
         if self.on_close:
             self.on_close()
@@ -182,6 +199,7 @@ class Popup:
         for hx, hy, w, h, cb in reversed(self.hits):
             if hx <= x <= hx + w and hy <= y <= hy + h:
                 cb()
+                return True
         return True
 
     def draw(self, dt):
@@ -194,8 +212,10 @@ class Popup:
         k = min(1.0, self.t * 5)
         y = (720 - H) / 2 + (1 - k) ** 2 * 60
         bx, by, bw, bh = P.window(x, y, W, H, "NOTIFICATION.exe", self.color)
+        # Daftarkan tombol [X] pojok kanan atas popup
+        self.hits.append((x + W - 30, y + 4, 26, 26, self.close))
         P.stext(x + W / 2, by + 46, self.title, 44, self.color, INK, 4)
-        if self.art:
+        if callable(self.art):
             self.art(P, x + W / 2, by + 250, self.t)
         P.text(x + W / 2, by + bh - 86, self.msg, 20, INK, "center", width=bw - 60, justify="center")
         _btn(self, x + W / 2 - 110, y + H - 76, 220, 52, self.btn, MINT, self.close, 22)

@@ -40,21 +40,27 @@ if winsound is not None:
     threading.Thread(target=_audio_worker, daemon=True).start()
 
 
+def clear():
+    """Mengosongkan antrean suara saat berpindah halaman."""
+    while not _AUDIO_Q.empty():
+        try:
+            _AUDIO_Q.get_nowait()
+        except queue.Empty:
+            break
+
+
 def toggle():
     global MUTE
     MUTE = not MUTE
+    if MUTE:
+        clear()
 
 
 def play(name="click"):
     if MUTE or winsound is None:
         return
     seq = _NOTES.get(name, _NOTES["click"])
-    # Buang antrean lama jika klik terlalu cepat agar suara tidak menumpuk
-    while not _AUDIO_Q.empty():
-        try:
-            _AUDIO_Q.get_nowait()
-        except queue.Empty:
-            break
+    clear()
     try:
         _AUDIO_Q.put_nowait(seq)
     except queue.Full:
