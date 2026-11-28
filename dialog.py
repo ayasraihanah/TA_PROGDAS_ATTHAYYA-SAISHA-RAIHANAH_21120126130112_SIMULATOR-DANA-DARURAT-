@@ -1,31 +1,24 @@
 # -*- coding: utf-8 -*-
-"""dialog.py - Form input & popup bergaya jendela Y2K (digambar di canvas, tanpa widget bawaan)."""
+"""dialog.py - Form input & popup bergaya kartu minimalis dengan fitur auto-close."""
 import sfx
-from kit import (INK, CREAM, PINK, HOT, LILAC, SKY, MINT, YELLOW, WHITE, GRAY, RED, lighten)
+from kit import INK, PINK, HOT, MINT, YELLOW, WHITE, GRAY, RED, darken
 
 
 def grp(digits):
     return f"{int(digits):,}".replace(",", ".") if digits else ""
 
 
-def _overlay(P):
-    P.cv.create_rectangle(14, 14, P.pw - 14, P.ph - 14, fill="", outline=INK, width=14, tags="dyn")
-
-
-def _btn(owner, x, y, w, h, label, color, cb, size=22):
+def _btn(owner, x, y, w, h, label, color, cb, size=18):
     mx, my = owner.app.mouse
     hov = x <= mx <= x + w and y <= my <= y + h
-    pressed = hov and owner.app.mouse_down
     P = owner.P
-    yy = y + (3 if pressed else (-3 if hov else 0))
-    P.rect(x, yy, w, h, lighten(color, 0.22) if hov else color, INK, 3.5, "dyn", r=h / 2, sh=5)
-    P.rect(x + 9, yy + 5, w - 18, max(4, h * 0.2), lighten(color, 0.6), "", 0, "dyn", r=6)
-    P.text(x + w / 2, yy + h / 2 + 1, label, size, INK)
+    P.rect(x, y, w, h, darken(color, 0.07) if hov else color, INK, 2, "dyn")
+    P.text(x + w / 2, y + h / 2, label, size, INK, tags="dyn")
     owner.hits.append((x, y, w, h, cb))
 
 
 class Dialog:
-    """Form modal. fields: [{key,label,kind('money'|'text'|'choice'),value,choices,hint,required,allow_zero}]"""
+    """Form modal minimalis."""
 
     def __init__(self, app, title, fields, ok_text="OK", color=PINK, on_ok=None, subtitle="", on_cancel=None):
         self.app, self.P = app, app.P
@@ -47,7 +40,8 @@ class Dialog:
     def close(self):
         if self.app.dialog is self:
             self.app.dialog = None
-        self.app.mark_dirty()
+        if hasattr(self.app, "mark_dirty"):
+            self.app.mark_dirty()
 
     def cancel(self):
         self.close()
@@ -62,15 +56,13 @@ class Dialog:
             k, v = f["kind"], f["value"]
             if k == "money":
                 if not v or (int(v) <= 0 and not f.get("allow_zero")):
-                    self.err = "'%s' harus berupa angka lebih dari 0." % f["label"]
-                    self.app.mark_dirty()
+                    self.err = "'%s' harus lebih dari 0." % f["label"]
                     return
                 out[f["key"]] = int(v)
             elif k == "text":
                 v = v.strip()
                 if f.get("required") and not v:
                     self.err = "'%s' tidak boleh kosong." % f["label"]
-                    self.app.mark_dirty()
                     return
                 out[f["key"]] = v
             else:
@@ -84,7 +76,6 @@ class Dialog:
     def _choice(self, f, d):
         f["idx"] = (f["idx"] + d) % len(f["choices"])
         sfx.play("click")
-        self.app.mark_dirty()
 
     def on_key(self, key, ch):
         f = self.fields[self.focus]
@@ -109,8 +100,8 @@ class Dialog:
                     f["value"] += ch
             else:
                 f["value"] += ch
-        self.err = "" if key not in ("Return", "KP_Enter") else self.err
-        self.app.mark_dirty()
+        if key not in ("Return", "KP_Enter"):
+            self.err = ""
 
     def click(self, x, y):
         for hx, hy, w, h, cb in reversed(self.hits):
@@ -124,58 +115,56 @@ class Dialog:
         P = self.P
         self.t += dt
         self.hits = []
-        _overlay(P)
-        W = 640
-        H = 190 + len(self.fields) * 92 + (26 if self.subtitle else 0)
+        P.cv.create_rectangle(10, 10, P.pw - 10, P.ph - 10, fill="", outline="#8d92a8", width=10, tags="dyn")
+        W = 580
+        H = 180 + len(self.fields) * 86 + (24 if self.subtitle else 0)
         x = (1280 - W) / 2
-        y = (720 - H) / 2 + (1 - min(1.0, self.t * 6)) ** 2 * 50
+        y = (720 - H) / 2
         bx, by, bw, _bh = P.window(x, y, W, H, self.title, self.color)
-        # Daftarkan tombol [X] pojok kanan atas jendela agar bisa menutup dialog
         self.hits.append((x + W - 30, y + 4, 26, 26, self.cancel))
 
         ty = by + 16
         if self.subtitle:
-            P.text(bx + 22, ty + 8, self.subtitle, 17, "#6f6580", "w", width=bw - 44)
-            ty += 30
+            P.text(bx + 22, ty + 6, self.subtitle, 15, "#5c6075", "w", width=bw - 44)
+            ty += 26
         for i, f in enumerate(self.fields):
-            fy = ty + i * 92
+            fy = ty + i * 86
             foc = i == self.focus
-            P.text(bx + 22, fy + 10, f["label"].upper(), 18, INK, "w")
-            rx, ry, rw, rh = bx + 22, fy + 26, bw - 44, 52
+            P.text(bx + 22, fy + 10, f["label"], 16, INK, "w")
+            rx, ry, rw, rh = bx + 22, fy + 24, bw - 44, 46
             if f["kind"] == "choice":
-                P.rect(rx, ry, rw, rh, WHITE, HOT if foc else INK, 4 if foc else 3, "dyn", r=14)
-                P.poly([(rx + 18, ry + rh / 2), (rx + 36, ry + 10), (rx + 36, ry + rh - 10)], YELLOW, INK, 2.5)
-                P.poly([(rx + rw - 18, ry + rh / 2), (rx + rw - 36, ry + 10), (rx + rw - 36, ry + rh - 10)], YELLOW, INK, 2.5)
-                P.text(rx + rw / 2, ry + rh / 2 + 1, f["choices"][f["idx"]], 22, INK)
+                P.rect(rx, ry, rw, rh, WHITE, HOT if foc else INK, 2.5 if foc else 1.5, "dyn")
+                P.text(rx + 28, ry + rh / 2, "<", 20, INK)
+                P.text(rx + rw - 28, ry + rh / 2, ">", 20, INK)
+                P.text(rx + rw / 2, ry + rh / 2, f["choices"][f["idx"]], 19, INK)
                 self.hits.append((rx, ry, 56, rh, lambda f=f, i=i: (setattr(self, "focus", i), self._choice(f, -1))))
                 self.hits.append((rx + rw - 56, ry, 56, rh, lambda f=f, i=i: (setattr(self, "focus", i), self._choice(f, 1))))
             else:
-                P.rect(rx, ry, rw, rh, WHITE, HOT if foc else INK, 4 if foc else 3, "dyn", r=14)
-                if f["kind"] == "money":
-                    txt = ("Rp " + grp(f["value"])) if f["value"] else ""
-                else:
-                    txt = f["value"]
+                P.rect(rx, ry, rw, rh, WHITE, HOT if foc else INK, 2.5 if foc else 1.5, "dyn")
+                txt = ("Rp " + grp(f["value"])) if (f["kind"] == "money" and f["value"]) else f["value"]
                 if txt:
-                    P.text(rx + 18, ry + rh / 2 + 1, txt, 26, INK, "w")
+                    P.text(rx + 14, ry + rh / 2, txt, 21, INK, "w")
                 else:
-                    P.text(rx + 18, ry + rh / 2 + 1, f["hint"], 22, "#b5aabf", "w")
-                if foc and int(self.t * 2.2) % 2 == 0:
-                    cx = rx + 20 + len(txt) * 26 * 0.56
-                    P.rect(cx, ry + 10, 3, rh - 20, HOT, "", 0)
+                    P.text(rx + 14, ry + rh / 2, f["hint"], 18, "#9ba0b4", "w")
+                if foc and int(self.t * 2) % 2 == 0:
+                    cx = rx + 16 + len(txt) * 12
+                    P.rect(cx, ry + 10, 2, rh - 20, HOT, "", 0)
                 self.hits.append((rx, ry, rw, rh, lambda i=i: setattr(self, "focus", i)))
-        by2 = y + H - 98
+
+        by2 = y + H - 82
         if self.err:
-            P.text(bx + bw / 2, by2 - 12, self.err, 17, RED, "center", width=bw - 40)
-        _btn(self, bx + 28, by2 + 6, 170, 52, "BATAL", GRAY, self.cancel, 20)
-        _btn(self, bx + bw - 28 - 260, by2 + 6, 260, 52, self.ok_text, MINT, self.submit, 22)
+            P.text(bx + bw / 2, by2 - 12, self.err, 15, "#c93b5b", "center", width=bw - 40)
+        _btn(self, bx + 24, by2 + 4, 150, 44, "BATAL", GRAY, self.cancel, 16)
+        _btn(self, bx + bw - 24 - 220, by2 + 4, 220, 44, self.ok_text, MINT, self.submit, 17)
 
 
 class Popup:
-    """Popup info/perayaan: judul besar, gambar di tengah, satu tombol."""
+    """Popup notifikasi minimalis dengan auto-close dan klik di mana saja untuk menutup."""
 
-    def __init__(self, app, title, msg, art=None, color=YELLOW, btn="OK", on_close=None, sound="lvl"):
+    def __init__(self, app, title, msg, art=None, color=YELLOW, btn="OK", on_close=None, sound="lvl", auto_close=0.0):
         self.app, self.P = app, app.P
         self.title, self.msg, self.art, self.color, self.btn, self.on_close = title, msg, art, color, btn, on_close
+        self.auto_close = float(auto_close or 0.0)
         self.t, self.hits = 0.0, []
         self._closed = False
         if sound:
@@ -187,7 +176,8 @@ class Popup:
         self._closed = True
         if self.app.dialog is self:
             self.app.dialog = None
-        self.app.mark_dirty()
+        if hasattr(self.app, "mark_dirty"):
+            self.app.mark_dirty()
         if self.on_close:
             self.on_close()
 
@@ -200,22 +190,35 @@ class Popup:
             if hx <= x <= hx + w and hy <= y <= hy + h:
                 cb()
                 return True
+        # Klik di luar kotak popup juga langsung menutup popup agar tidak mengganggu
+        W, H = 560, 320
+        px, py = (1280 - W) / 2, (720 - H) / 2
+        if not (px <= x <= px + W and py <= y <= py + H):
+            self.close()
         return True
 
     def draw(self, dt):
         P = self.P
         self.t += dt
+        if self.auto_close > 0 and self.t >= self.auto_close:
+            self.close()
+            return
+
         self.hits = []
-        _overlay(P)
-        W, H = 680, 470
+        P.cv.create_rectangle(10, 10, P.pw - 10, P.ph - 10, fill="", outline="#8d92a8", width=10, tags="dyn")
+        W, H = 560, 320
         x = (1280 - W) / 2
-        k = min(1.0, self.t * 5)
-        y = (720 - H) / 2 + (1 - k) ** 2 * 60
-        bx, by, bw, bh = P.window(x, y, W, H, "NOTIFICATION.exe", self.color)
-        # Daftarkan tombol [X] pojok kanan atas popup
+        y = (720 - H) / 2
+        bx, by, bw, bh = P.window(x, y, W, H, "INFO (Klik X / Esc untuk tutup)", self.color)
+        # Area klik tombol [X] pojok kanan atas
         self.hits.append((x + W - 30, y + 4, 26, 26, self.close))
-        P.stext(x + W / 2, by + 46, self.title, 44, self.color, INK, 4)
-        if callable(self.art):
-            self.art(P, x + W / 2, by + 250, self.t)
-        P.text(x + W / 2, by + bh - 86, self.msg, 20, INK, "center", width=bw - 60, justify="center")
-        _btn(self, x + W / 2 - 110, y + H - 76, 220, 52, self.btn, MINT, self.close, 22)
+        P.text(x + W - 15, y + 15, "X", 12, WHITE, "center")
+
+        P.text(x + W / 2, by + 54, self.title, 30, INK, "center")
+        P.text(x + W / 2, by + bh / 2 - 4, self.msg, 18, "#4a4e69", "center", width=bw - 64, justify="center")
+
+        if self.auto_close > 0:
+            rem = max(0.0, 1.0 - self.t / self.auto_close)
+            P.bar(x + 90, y + H - 84, W - 180, 8, rem, self.color)
+
+        _btn(self, x + W / 2 - 95, y + H - 64, 190, 44, self.btn, MINT, self.close, 18)

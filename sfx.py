@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""sfx.py - Efek suara retro 8-bit ringan dengan 1 worker thread (tanpa thread spam)."""
+"""sfx.py - Efek suara 8-bit ringan dengan 1 worker thread."""
 import queue
 import threading
 
@@ -11,15 +11,15 @@ except ImportError:
 MUTE = False
 
 _NOTES = {
-    "click": [(980, 35)],
-    "coin": [(988, 55), (1319, 110)],
-    "star": [(1047, 50), (1319, 50), (1568, 90)],
-    "boot": [(523, 60), (659, 60), (784, 60), (1047, 130)],
-    "lvl": [(587, 70), (784, 70), (988, 70), (1175, 160)],
-    "hit": [(220, 70), (155, 95)],
+    "click": [(900, 30)],
+    "coin": [(988, 50), (1319, 90)],
+    "star": [(1047, 45), (1319, 75)],
+    "boot": [(659, 55), (880, 95)],
+    "lvl": [(587, 60), (784, 60), (1047, 120)],
+    "hit": [(220, 65), (165, 85)],
 }
 
-_AUDIO_Q = queue.Queue(maxsize=4)
+_AUDIO_Q = queue.Queue(maxsize=3)
 
 
 def _audio_worker():
@@ -41,7 +41,6 @@ if winsound is not None:
 
 
 def clear():
-    """Mengosongkan antrean suara saat berpindah halaman."""
     while not _AUDIO_Q.empty():
         try:
             _AUDIO_Q.get_nowait()

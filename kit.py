@@ -1,38 +1,33 @@
 # -*- coding: utf-8 -*-
-"""kit.py - Palet warna Y2K, helper gambar/matematika ter-cache, partikel, dan base class Screen."""
+"""kit.py - Palet minimalis pastel, helper ter-cache, partikel ringan, dan base Screen."""
 import math
 import random
 from functools import lru_cache
 
-# ----------------------------------------------------------------------
-# PALET WARNA Y2K / PIXEL PASTEL
-# ----------------------------------------------------------------------
-INK = "#1b1429"
-CREAM = "#fff7fb"
-PINK = "#ff9ed2"
-HOT = "#ff4fa3"
-ROSE = "#ff7eb6"
-LILAC = "#c9a8ff"
-GRAPE = "#8a5cf6"
-SKY = "#7ad7ff"
-BLUE = "#4ea8ff"
-MINT = "#6ef2c2"
-GREEN = "#4cd97b"
-LEAF = "#2eb872"
-YELLOW = "#ffe066"
-GOLD = "#ffb703"
-ORANGE = "#ff9f43"
-RED = "#ff5c77"
-TEAL = "#2ec4b6"
+# Palet Minimalis Pastel (bersih, kontras nyaman, rendah beban render)
+INK = "#2b2d42"
+CREAM = "#ffffff"
+PINK = "#f6d6e5"
+HOT = "#e06d9f"
+ROSE = "#eba8c5"
+LILAC = "#e4def8"
+GRAPE = "#8b7ec8"
+SKY = "#d8eefb"
+BLUE = "#7bb8e8"
+MINT = "#d2f3e5"
+GREEN = "#5ec492"
+LEAF = "#46a878"
+YELLOW = "#fdf0c2"
+GOLD = "#e9be56"
+ORANGE = "#f5cfa8"
+RED = "#f3a6b2"
+TEAL = "#7ac7c4"
 WHITE = "#ffffff"
-GRAY = "#b8b0c8"
-DIRT = "#9c6644"
-DIRT_D = "#6f452c"
+GRAY = "#e6e8f0"
+DIRT = "#c8b6a6"
+DIRT_D = "#9f8c7a"
 
 
-# ----------------------------------------------------------------------
-# FUNGSI BANTU WARNA, FORMAT & GEOMETRI (TER-CACHE)
-# ----------------------------------------------------------------------
 @lru_cache(maxsize=256)
 def _hex_to_rgb(hex_color):
     h = (hex_color or "#ffffff").lstrip("#")
@@ -56,11 +51,11 @@ def mix(c1, c2, t=0.5):
     return _rgb_to_hex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t)
 
 
-def lighten(hex_color, amt=0.3):
+def lighten(hex_color, amt=0.25):
     return mix(hex_color, WHITE, amt)
 
 
-def darken(hex_color, amt=0.3):
+def darken(hex_color, amt=0.25):
     return mix(hex_color, INK, amt)
 
 
@@ -69,9 +64,8 @@ def _unit_circle(steps):
     return tuple((math.cos(i * math.tau / steps), math.sin(i * math.tau / steps)) for i in range(steps))
 
 
-def ell(cx, cy, rx, ry, steps=16):
-    """Menghasilkan daftar titik (x, y) poligon elips menggunakan tabel sin/cos ter-cache."""
-    steps = max(8, min(16, int(steps)))
+def ell(cx, cy, rx, ry, steps=12):
+    steps = max(8, min(14, int(steps)))
     return [(cx + ux * rx, cy + uy * ry) for ux, uy in _unit_circle(steps)]
 
 
@@ -79,11 +73,9 @@ def rupiah(n):
     return "Rp " + f"{int(n):,}".replace(",", ".")
 
 
-# ----------------------------------------------------------------------
-# SISTEM PARTIKEL (confetti, spark, star)
-# ----------------------------------------------------------------------
 class Particles:
-    MAX_ITEMS = 48
+    """Efek partikel minimalis (maksimal 16 titik agar selalu ringan)."""
+    MAX_ITEMS = 16
 
     def __init__(self):
         self.items = []
@@ -91,23 +83,20 @@ class Particles:
     def clear(self):
         self.items.clear()
 
-    def spawn(self, x, y, kind="spark", colors=None, count=10,
-              vx_range=240, vy_up=180, gravity=500, life=0.9, size=9):
-        cols = colors or [YELLOW, PINK, MINT, SKY, WHITE]
+    def spawn(self, x, y, kind="spark", colors=None, count=6,
+              vx_range=180, vy_up=140, gravity=420, life=0.6, size=7):
+        cols = colors or [HOT, BLUE, GREEN]
         room = max(0, self.MAX_ITEMS - len(self.items))
         for _ in range(min(count, room)):
-            vx = random.uniform(-vx_range, vx_range)
-            vy = random.uniform(-vy_up * 1.3, -vy_up * 0.3)
             self.items.append({
                 "x": float(x),
                 "y": float(y),
-                "vx": vx,
-                "vy": vy,
+                "vx": random.uniform(-vx_range, vx_range),
+                "vy": random.uniform(-vy_up * 1.2, -vy_up * 0.3),
                 "g": float(gravity),
-                "life": random.uniform(life * 0.7, life * 1.15),
+                "life": random.uniform(life * 0.75, life),
                 "max_life": float(life),
                 "col": random.choice(cols),
-                "kind": kind,
                 "size": size,
             })
 
@@ -127,19 +116,11 @@ class Particles:
 
     def draw(self, P):
         for p in self.items:
-            k = max(0.1, p["life"] / max(0.01, p["max_life"]))
-            sz = max(3, p["size"] * k)
-            if p["kind"] == "star":
-                P.star(p["x"], p["y"], sz, p["col"], INK, 1.5)
-            elif p["kind"] == "confetti":
-                P.rect(p["x"] - sz * 0.6, p["y"] - sz * 0.4, sz * 1.2, sz * 0.8, p["col"], INK, 1.5)
-            else:
-                P.sparkle(p["x"], p["y"], sz, p["col"], INK, 1.5)
+            k = max(0.2, p["life"] / max(0.01, p["max_life"]))
+            sz = max(2.5, p["size"] * k)
+            P.oval(p["x"], p["y"], sz, sz, fill=p["col"], outline="", width=0, tags="dyn")
 
 
-# ----------------------------------------------------------------------
-# BASE CLASS SCREEN (dipakai TitleScreen, CreatorScreen, HubY2K)
-# ----------------------------------------------------------------------
 class Screen:
     name = "base"
 
@@ -154,7 +135,6 @@ class Screen:
         self.hits = []
 
     def leave(self):
-        """Membersihkan area klik dan partikel saat meninggalkan halaman."""
         self.hits = []
         parts = getattr(self, "parts", None)
         if parts is not None:
@@ -173,14 +153,12 @@ class Screen:
         mx, my = self.app.mouse
         return x <= mx <= x + w and y <= my <= y + h
 
-    def button(self, x, y, w, h, label, color, cb, size=22):
+    def button(self, x, y, w, h, label, color, cb, size=18):
         hov = self.hover(x, y, w, h)
-        pressed = hov and self.app.mouse_down
-        yy = y + (3 if pressed else (-3 if hov else 0))
-        fill = lighten(color, 0.22) if hov else color
-        self.P.rect(x, yy, w, h, fill, INK, 3.5, "dyn", r=h / 2, sh=5)
+        fill = darken(color, 0.07) if hov else color
+        self.P.rect(x, y, w, h, fill=fill, outline=INK, width=2, tags="dyn")
         if label:
-            self.P.text(x + w / 2, yy + h / 2 + 1, label, size, INK)
+            self.P.text(x + w / 2, y + h / 2, label, size, INK, tags="dyn")
         self.hits.append((x, y, w, h, cb))
         return hov
 

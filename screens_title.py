@@ -1,67 +1,40 @@
 # -*- coding: utf-8 -*-
-"""screens_title.py - Halaman 1: Opening/Title, Halaman 2: Pembuat Karakter."""
-import math
-
+"""screens_title.py - Halaman Title & Kustomisasi Karakter Minimalis."""
 import art
 import sfx
 from dialog import Dialog, Popup
-from kit import (INK, CREAM, PINK, HOT, LILAC, SKY, MINT, YELLOW, GOLD, WHITE, GRAY, GREEN, ORANGE, BLUE,
-                 Screen, Particles, lighten)
+from kit import INK, CREAM, PINK, HOT, LILAC, SKY, MINT, YELLOW, WHITE, GRAY, Screen
 
-BOOT = 2.4
+BOOT = 0.0  # Langsung tampil tanpa animasi loading berat
 
-CAST = [  # empat tokoh pembuka (original)
-    dict(kelas=0, rambut=0, warna_rambut=1, kulit=1, mata=3, baju=0, warna_baju=0, sepatu=0, aksesori=3),
-    dict(kelas=3, rambut=2, warna_rambut=2, kulit=0, mata=0, baju=2, warna_baju=2, sepatu=1, aksesori=1),
-    dict(kelas=2, rambut=4, warna_rambut=3, kulit=3, mata=4, baju=1, warna_baju=5, sepatu=0, aksesori=0),
-    dict(kelas=1, rambut=1, warna_rambut=0, kulit=2, mata=5, baju=3, warna_baju=4, sepatu=2, aksesori=2),
-]
-CAST_POS = [(130, 300, 1), (305, 250, 1), (975, 250, -1), (1150, 300, -1)]
-CAST_SAY = ["Hi!", "Nabung yuk!", "Ayo!", "Semangat!"]
-GY = 640
-
-HOWTO = ("TABUNG = HEAL: HP dompet naik + XP.\nJAJAN impulsif = DAMAGE: HP dan XP turun.\n"
-         "Wishlist gadget jadi BOSS. Makin mahal, makin sulit.\nKumpulkan tabunganmu dan kalahkan semua Boss!")
-
-
-def bounce(k):
-    if k >= 1:
-        return 1.0
-    if k < 1 / 2.75:
-        return 7.5625 * k * k
-    if k < 2 / 2.75:
-        k -= 1.5 / 2.75
-        return 7.5625 * k * k + 0.75
-    if k < 2.5 / 2.75:
-        k -= 2.25 / 2.75
-        return 7.5625 * k * k + 0.9375
-    k -= 2.625 / 2.75
-    return 7.5625 * k * k + 0.984375
+HOWTO = (
+    "1. TABUNG (HEAL): Menambah HP Dana Darurat & XP.\n"
+    "2. JAJAN (DAMAGE): Mengurangi HP Dana Darurat & XP.\n"
+    "3. BOSS WISHLIST: Target gadget yang bisa diserang dengan tabungan."
+)
 
 
 class TitleScreen(Screen):
     name = "title"
 
-    def enter(self, **kw):
+    def enter(self, **_kw):
         super().enter()
-        self.t = 0.0 if kw.get("boot", True) else BOOT + 2
-        self.parts = Particles()
-        self.hop = [0.0] * 4
-        self.say = [0.0] * 4
-        self.started = self.t >= BOOT
+        self.hop = 0.0
+        self.say = ""
 
     def draw_static(self):
-        art.draw_meadow(self.P, GY)
+        # Latar polos pastel minimalis sangat ringan
+        self.P.bgfill("#f6f7fb", tags="static")
+        self.P.rect(0, 686, 1280, 34, "#eceef6", INK, 1, tags="static")
+        self.P.text(1264, 703, "SaveQuest · Minimalist Edition", 14, "#6c7086", "e", tags="static")
 
     def update(self, dt):
-        self.t += dt
-        self.parts.update(dt)
-        self.hop = [max(0.0, h - dt) for h in self.hop]
-        self.say = [max(0.0, s - dt) for s in self.say]
-        if self.t >= BOOT and not self.started:
-            self.started = True
-            sfx.play("boot")
-            self.parts.spawn(640, 200, "confetti", [HOT, YELLOW, MINT, SKY, LILAC], 22, 500, 360, 600, 1.3, 10)
+        super().update(dt)
+        if self.hop > 0:
+            self.hop = max(0.0, self.hop - dt)
+            if self.hop == 0:
+                self.say = ""
+                self.app.mark_dirty()
 
     def has_save(self):
         return self.app.game.data["setup_done"]
@@ -70,410 +43,72 @@ class TitleScreen(Screen):
         self.app.start_game()
 
     def on_key(self, key, _ch):
-        if self.t >= BOOT and key in ("Return", "space", "KP_Enter"):
+        if key in ("Return", "space", "KP_Enter"):
             self.start()
             return True
         return False
 
-    def on_click_extra(self, x, y):
-        for i, (cx, h, _f) in enumerate(CAST_POS):
-            if abs(x - cx) < h * 0.28 and GY - h * 1.05 < y < GY:
-                self.hop[i], self.say[i] = 0.7, 1.8
-                sfx.play("star")
-                self.parts.spawn(cx, GY - h * 0.6, "spark", [YELLOW, WHITE, PINK], 8, 220, 80, 500, 0.8, 9)
-
-    def click(self, x, y):
-        if self.t < BOOT:
-            self.t = BOOT
-            return True
-        if super().click(x, y):
-            return True
-        self.on_click_extra(x, y)
-        return True
-
     def draw(self):
-        self.hits = []
-        if self.t < BOOT:
-            self.draw_boot()
-            return
-        P, t = self.P, self.t - BOOT
-        art.draw_clouds(P, self.t)
-        for i, (cx, h, f) in enumerate(CAST_POS):
-            hop = abs(math.sin(self.hop[i] / 0.7 * math.pi)) * 60 if self.hop[i] > 0 else 0
-            pose = "cheer" if self.hop[i] > 0 else "idle"
-            art.draw_chibi(P, cx, GY - hop, h, CAST[i], self.t + i * 1.3, pose, f)
-            if self.say[i] > 0:
-                art.draw_speech(P, cx, GY - h * 1.14, CAST_SAY[i], 22)
-        word = "SAVEQUEST"
-        cols = [HOT, YELLOW, MINT, SKY, LILAC, HOT, YELLOW, MINT, SKY]
-        for i, ch in enumerate(word):
-            k = max(0.0, min(1.0, (t - i * 0.06) / 0.45))
-            drop = -(1 - bounce(k)) * 420
-            P.stext(640 + (i - 4) * 76, 128 + drop + math.sin(self.t * 3 + i * 0.7) * 5, ch, 104, cols[i], INK, 5)
-        if t > 0.7:
-            P.rect(420, 206, 440, 46, HOT, INK, 4, r=23, sh=5)
-            P.text(640, 230, "Dana Darurat & Wishlist Quest", 21, WHITE)
-            P.star(448, 229, 11, YELLOW, INK, 2)
-            P.star(832, 229, 11, YELLOW, INK, 2)
-        if t > 0.9:
-            slide = (1 - min(1.0, (t - 0.9) * 3.5)) * 280
-            lab = "LANJUTKAN" if self.has_save() else "MULAI PETUALANGAN"
-            self.button(450 + slide, 288, 380, 78, lab, MINT, self.start, 27)
-            P.poly([(450 + slide + 34, 313), (450 + slide + 34, 341), (450 + slide + 58, 327)], WHITE, INK, 3)
-            self.button(450 + slide, 380, 380, 58, "CARA MAIN", YELLOW, self.howto, 23)
-            self.button(450 + slide, 450, 182, 52, "SUARA " + ("OFF" if sfx.MUTE else "ON"), SKY, self.toggle_snd, 18)
-            if self.has_save():
-                self.button(648 + slide, 450, 182, 52, "GAME BARU", PINK, self.newgame, 18)
-                self.button(450 + slide, 514, 380, 52, "KELUAR", GRAY, self.app.quit_app, 20)
-            else:
-                self.button(648 + slide, 450, 182, 52, "KELUAR", PINK, self.app.quit_app, 18)
-            if int(self.t * 2) % 2 == 0:
-                P.stext(640, 674, "tekan ENTER atau SPASI untuk mulai", 19, WHITE, INK, 2)
-        self.parts.draw(P)
-
-    def draw_boot(self):
-        P, t = self.P, self.t
-        P.cv.create_rectangle(0, 0, P.pw, P.ph, fill=PINK, outline="", tags="dyn")
-        for i in range(0, 14):
-            x = (i * 110 + t * 70) % 1540 - 130
-            P.line([(x, 0), (x - 320, 720)], lighten(PINK, 0.28), 4)
-        bx, by, bw, _bh = P.window(270, 130, 740, 440, "", LILAC, CREAM, "savequest.exe/loading")
-        P.stext(640, by + 62, "SAVEQUEST", 78, YELLOW, INK, 4)
-        prog = min(1.0, t / (BOOT - 0.3))
-        P.bar(bx + 60, by + 160, bw - 120, 40, prog, HOT)
-        P.text(640, by + 230, "LOADING... %d%%" % int(prog * 100), 24)
-        msgs = ["Memuat dompet...", "Memanggil boss wishlist...", "Mengasah pedang tabungan...", "Siap bertualang!"]
-        P.text(640, by + 272, msgs[min(3, int(prog * 4))], 20, "#7a6a8a")
-
-    def toggle_snd(self):
-        sfx.toggle()
-
-    def howto(self):
-        self.app.dialog = Popup(self.app, "CARA MAIN", HOWTO, None, SKY, "SIAP!", sound="coin")
-
-    def newgame(self):
-        def ok(r):
-            if r["yakin"] == 1:
-                self.app.game.reset()
-                self.app.toast("Data dihapus. Mulai dari awal!", HOT)
-        self.app.dialog = Dialog(self.app, "GAME BARU?", [dict(key="yakin", label="Hapus semua progres?", kind="choice",
-                                 choices=["Tidak, batal", "Ya, hapus semua"])], "OK", PINK, ok)
-
-
-# ====================================================================== CREATOR
-CLASS_STATS = {"Star Mage": (0.3, 0.5, 0.95), "Siren Bard": (0.4, 0.75, 0.7),
-               "Riot Rogue": (0.55, 0.95, 0.4), "Fire Knight": (0.95, 0.4, 0.5)}
-
-
-class CreatorScreen(Screen):
-    name = "creator"
-
-    def enter(self, **kw):
-        super().enter()
-        g = self.app.game
-        self.first = kw.get("first", False)
-        self.char = dict(g.data["char"] or {})
-        for k in art.OPT:
-            self.char.setdefault(k, art.DEFAULT_IDX[k])
-        self.nama = g.data["nama"]
-        self.parts = Particles()
-        self.cheer = 0.0
-        self.shown = list(CLASS_STATS[art.opt(self.char, "kelas")[0]])
-
-    def draw_static(self):
-        art.y2k_bg(self.P, "#ffb3da", "#b9a2ff", seed=8)
-        art.taskbar(self.P)
-
-    def update(self, dt):
-        self.t += dt
-        self.cheer = max(0.0, self.cheer - dt)
-        self.parts.update(dt)
-        tgt = CLASS_STATS[art.opt(self.char, "kelas")[0]]
-        self.shown = [s + (g - s) * min(1.0, dt * 10) for s, g in zip(self.shown, tgt)]
-
-    def change(self, key, d):
-        art.cycle(self.char, key, d)
-        self.cheer = 0.9
-        sfx.play("click")
-        self.parts.spawn(728, 380, "spark", [YELLOW, WHITE, PINK, MINT], 8, 220, 110, 500, 0.7, 9)
-
-    def randomize(self):
-        self.char = art.random_char()
-        self.cheer = 1.0
-        sfx.play("coin")
-        self.parts.spawn(728, 380, "star", [YELLOW, PINK, MINT, SKY], 10, 260, 140, 500, 0.8, 10)
-
-    def rename(self):
-        def ok(r):
-            self.nama = r["nama"][:14]
-        self.app.dialog = Dialog(self.app, "NAMA PAHLAWAN", [dict(key="nama", label="Nama karakter", kind="text",
-                                 value=self.nama, required=True, maxlen=14)], "SIMPAN", YELLOW, ok)
-
-    def back(self):
-        self.app.goto("hub" if self.app.game.data["setup_done"] else "title")
-
-    def finish(self):
-        g = self.app.game
-        g.data["char"] = dict(self.char)
-        g.data["nama"] = self.nama or "Hero"
-        g.save()
-        if g.data["setup_done"]:
-            self.app.toast("Karakter tersimpan!", MINT)
-            self.app.goto("hub")
-            return
-
-        def ok(r):
-            g.data["target"] = r["target"]
-            g.data["saldo"] = r["saldo"]
-            g.data["setup_done"] = True
-            ev = g.unlock_hero()
-            self.app.goto("hub")
-            self.app.show_events(ev)
-        self.app.dialog = Dialog(self.app, "PENGATURAN AWAL", [
-            dict(key="target", label="Target dana darurat", kind="money", value="5000000", hint="mis. 5000000"),
-            dict(key="saldo", label="Saldo dana darurat saat ini", kind="money", value="0", allow_zero=True)],
-            "MULAI!", MINT, ok, "Tips: dana darurat ideal 3-6x pengeluaran bulanan.")
-
-    def on_key(self, key, _ch):
-        if key in ("Return", "KP_Enter"):
-            self.finish()
-            return True
-        return False
-
-    def arrow(self, x, y, d, cb):
         P = self.P
-        self.button(x, y, 40, 44, "", YELLOW, cb)
-        hov = self.hover(x, y, 40, 44)
-        yy = y + (3 if hov and self.app.mouse_down else (-3 if hov else 0))
-        cx = x + 20
-        # d=-1 -> ujung ke kiri; d=1 -> ujung ke kanan
-        P.poly([(cx - 7 * d, yy + 12), (cx + 7 * d, yy + 22), (cx - 7 * d, yy + 32)], INK, INK, 2)
-
-    def draw(self):
-        P, ch = self.P, self.char
         self.hits = []
-        cls = art.cls_info(ch)
-        cname = art.opt(ch, "kelas")[0]
 
-        # ---- kiri: lemari
-        bx, by, _bw, _bh = P.window(24, 24, 500, 650, "WARDROBE.exe", PINK)
-        for i, (key, label) in enumerate(art.ROWS):
-            y = by + 12 + i * 62
-            P.text(bx + 16, y + 22, label, 17, INK, "w")
-            self.arrow(bx + 178, y, -1, lambda k=key: self.change(k, -1))
-            self.arrow(bx + 434, y, 1, lambda k=key: self.change(k, 1))
-            P.rect(bx + 224, y, 206, 44, WHITE, INK, 3, r=12)
-            lab, val = art.opt(ch, key)
-            if val.startswith("#"):
-                P.oval(bx + 246, y + 22, 12, 12, val, INK, 2.5)
-                P.text(bx + 266, y + 23, lab, 18, INK, "w")
-            else:
-                P.text(bx + 327, y + 23, lab, 18, INK)
+        # Kartu utama terpusat
+        P.window(350, 96, 580, 520, "SAVEQUEST.exe", PINK, WHITE, tags="dyn")
+        P.text(640, 184, "SAVEQUEST", 46, INK, "center")
+        P.text(640, 224, "Simulator Dana Darurat & Wishlist RPG", 17, "#5c6075", "center")
 
-        # ---- tengah: panggung (ringan tanpa poligon sinar meluap batas)
-        sx, sy, sw, sh = 548, 24, 360, 650
-        P.rect(sx, sy, sw, sh, lighten(cls["col"], 0.35), INK, 4, r=20, sh=7)
-        cx = sx + sw / 2
-        P.oval(cx, 300, 142, 142, lighten(cls["col"], 0.58), "", 0)
-        P.rect(sx, sy + 560, sw, 90, INK, INK, 4, r=20)
-        P.rect(sx, sy + 560, sw, 40, INK, "", 0)
-        P.rect(sx, sy, sw, sh, "", INK, 4, r=20)
+        # Preview mini karakter pengguna di tengah atas tombol
+        char_cfg = dict(self.app.game.data.get("char") or {})
+        for k in art.OPT:
+            char_cfg.setdefault(k, art.DEFAULT_IDX[k])
+        art.draw_chibi(P, 640, 346 - (10 if self.hop > 0 else 0), 106, char_cfg, self.t, "cheer" if self.hop > 0 else "idle", 1)
+        if self.say:
+            P.text(640, 252, self.say, 14, HOT, "center")
+        self.hits.append((595, 250, 90, 100, self._poke_hero))
 
-        art.draw_chibi(P, cx, sy + 540, 410, ch, self.t, "cheer" if self.cheer > 0 else "idle")
-        word = cls["say"][int(self.t / 2.5) % len(cls["say"])]
-        art.draw_speech(P, cx + 85, sy + 148, word, 22, WHITE)
-        P.text(sx + 22, sy + 580, "ATTACK:", 17, YELLOW, "w")
-        P.text(sx + 110, sy + 580, cls["atk"], 19, CREAM, "w")
-        P.text(sx + 22, sy + 618, "SPELL:", 17, YELLOW, "w")
-        P.text(sx + 110, sy + 618, cls["spell"], 19, CREAM, "w")
+        lab = "LANJUTKAN" if self.has_save() else "MULAI PETUALANGAN"
+        self.button(450, 372, 380, 50, lab, MINT, self.start, 20)
+        self.button(450, 434, 380, 44, "CARA MAIN", YELLOW, self.howto, 18)
+        self.button(450, 490, 184, 42, "SUARA: " + ("OFF" if sfx.MUTE else "ON"), SKY, self.toggle_snd, 16)
 
-        # ---- kanan: kartu karakter
-        rx, ry, rw, _rh = P.window(924, 24, 332, 650, "CHARACTER.exe", LILAC)
-        self.button(rx + 12, ry + 12, rw - 24, 56, self.nama + "  (ubah)", YELLOW, self.rename, 22)
-        P.text(rx + 16, ry + 100, "KELAS", 16, "#6f6580", "w")
-        P.stext(rx + rw / 2, ry + 132, cname.upper(), 30, cls["col"], INK, 3)
-        P.text(rx + 16, ry + 176, "HP", 22, INK, "w")
-        P.hearts_row(rx + 56, ry + 177, 6, 6, 15, 4)
-        for i, (lab, v) in enumerate(zip(("STRENGTH", "AGILITY", "MAGIC"), self.shown)):
-            y = ry + 214 + i * 58
-            P.text(rx + 16, y, lab, 17, INK, "w")
-            P.bar(rx + 16, y + 14, rw - 32, 22, v, [HOT, MINT, SKY][i])
-        yy = ry + 400
-        self.button(rx + 12, yy, rw - 24, 54, "ACAK KARAKTER", SKY, self.randomize, 21)
-        self.button(rx + 12, yy + 68, rw - 24, 76, "SELESAI!", MINT, self.finish, 32)
-        if not self.first or self.app.game.data["setup_done"]:
-            self.button(rx + 12, yy + 156, rw - 24, 44, "KEMBALI", GRAY, self.back, 18)
-        self.parts.draw(P)# -*- coding: utf-8 -*-
-"""screens_title.py - Halaman 1: Opening/Title, Halaman 2: Pembuat Karakter."""
-import math
+        if self.has_save():
+            self.button(646, 490, 184, 42, "GAME BARU", PINK, self.newgame, 16)
+            self.button(450, 544, 380, 40, "KELUAR", GRAY, self.app.quit_app, 16)
+        else:
+            self.button(646, 490, 184, 42, "KELUAR", GRAY, self.app.quit_app, 16)
 
-import art
-import sfx
-from dialog import Dialog, Popup
-from kit import (INK, CREAM, PINK, HOT, LILAC, SKY, MINT, YELLOW, WHITE, GRAY,
-                 Screen, Particles, lighten)
-
-BOOT = 2.4
-
-CAST = [  # empat tokoh pembuka (original)
-    dict(kelas=0, rambut=0, warna_rambut=1, kulit=1, mata=3, baju=0, warna_baju=0, sepatu=0, aksesori=3),
-    dict(kelas=3, rambut=2, warna_rambut=2, kulit=0, mata=0, baju=2, warna_baju=2, sepatu=1, aksesori=1),
-    dict(kelas=2, rambut=4, warna_rambut=3, kulit=3, mata=4, baju=1, warna_baju=5, sepatu=0, aksesori=0),
-    dict(kelas=1, rambut=1, warna_rambut=0, kulit=2, mata=5, baju=3, warna_baju=4, sepatu=2, aksesori=2),
-]
-CAST_POS = [(130, 300, 1), (305, 250, 1), (975, 250, -1), (1150, 300, -1)]
-CAST_SAY = ["Hi!", "Nabung yuk!", "Ayo!", "Semangat!"]
-GY = 640
-
-HOWTO = ("TABUNG = HEAL: HP dompet naik + XP.\nJAJAN impulsif = DAMAGE: HP dan XP turun.\n"
-         "Wishlist gadget jadi BOSS. Makin mahal, makin sulit.\nKumpulkan tabunganmu dan kalahkan semua Boss!")
-
-
-def bounce(k):
-    if k >= 1:
-        return 1.0
-    if k < 1 / 2.75:
-        return 7.5625 * k * k
-    if k < 2 / 2.75:
-        k -= 1.5 / 2.75
-        return 7.5625 * k * k + 0.75
-    if k < 2.5 / 2.75:
-        k -= 2.25 / 2.75
-        return 7.5625 * k * k + 0.9375
-    k -= 2.625 / 2.75
-    return 7.5625 * k * k + 0.984375
-
-
-class TitleScreen(Screen):
-    name = "title"
-
-    def enter(self, **kw):
-        super().enter()
-        self.t = 0.0 if kw.get("boot", True) else BOOT + 2
-        self.parts = Particles()
-        self.hop = [0.0] * 4
-        self.say = [0.0] * 4
-        self.started = self.t >= BOOT
-
-    def draw_static(self):
-        art.draw_meadow(self.P, GY)
-
-    def update(self, dt):
-        self.t += dt
-        self.parts.update(dt)
-        self.hop = [max(0.0, h - dt) for h in self.hop]
-        self.say = [max(0.0, s - dt) for s in self.say]
-        if self.t >= BOOT and not self.started:
-            self.started = True
-            sfx.play("boot")
-            self.parts.spawn(640, 200, "confetti", [HOT, YELLOW, MINT, SKY, LILAC], 22, 500, 360, 600, 1.3, 10)
-
-    def has_save(self):
-        return self.app.game.data["setup_done"]
-
-    def start(self):
-        self.app.start_game()
-
-    def on_key(self, key, _ch):
-        if self.t < BOOT and key in ("Return", "space", "KP_Enter", "Escape"):
-            self.t = BOOT
-            self.app.mark_dirty()
-            return True
-        if self.t >= BOOT and key in ("Return", "space", "KP_Enter"):
-            self.start()
-            return True
-        return False
-
-    def on_click_extra(self, x, y):
-        for i, (cx, h, _f) in enumerate(CAST_POS):
-            if abs(x - cx) < h * 0.28 and GY - h * 1.05 < y < GY:
-                self.hop[i], self.say[i] = 0.7, 1.8
-                sfx.play("star")
-                self.parts.spawn(cx, GY - h * 0.6, "spark", [YELLOW, WHITE, PINK], 8, 220, 80, 500, 0.8, 9)
-
-    def click(self, x, y):
-        if self.t < BOOT:
-            self.t = BOOT
-            self.app.mark_dirty()
-            return True
-        if super().click(x, y):
-            return True
-        self.on_click_extra(x, y)
-        return True
-
-    def draw(self):
-        self.hits = []
-        if self.t < BOOT:
-            self.draw_boot()
-            return
-        P, t = self.P, self.t - BOOT
-        art.draw_clouds(P, self.t)
-        for i, (cx, h, f) in enumerate(CAST_POS):
-            hop = abs(math.sin(self.hop[i] / 0.7 * math.pi)) * 60 if self.hop[i] > 0 else 0
-            pose = "cheer" if self.hop[i] > 0 else "idle"
-            art.draw_chibi(P, cx, GY - hop, h, CAST[i], self.t + i * 1.3, pose, f)
-            if self.say[i] > 0:
-                art.draw_speech(P, cx, GY - h * 1.14, CAST_SAY[i], 22)
-        word = "SAVEQUEST"
-        cols = [HOT, YELLOW, MINT, SKY, LILAC, HOT, YELLOW, MINT, SKY]
-        for i, ch in enumerate(word):
-            k = max(0.0, min(1.0, (t - i * 0.06) / 0.45))
-            drop = -(1 - bounce(k)) * 420
-            P.stext(640 + (i - 4) * 76, 128 + drop + math.sin(self.t * 3 + i * 0.7) * 5, ch, 104, cols[i], INK, 5)
-        if t > 0.7:
-            P.rect(420, 206, 440, 46, HOT, INK, 4, r=23, sh=5)
-            P.text(640, 230, "Dana Darurat & Wishlist Quest", 21, WHITE)
-            P.star(448, 229, 11, YELLOW, INK, 2)
-            P.star(832, 229, 11, YELLOW, INK, 2)
-        if t > 0.9:
-            slide = (1 - min(1.0, (t - 0.9) * 3.5)) * 280
-            lab = "LANJUTKAN" if self.has_save() else "MULAI PETUALANGAN"
-            self.button(450 + slide, 288, 380, 78, lab, MINT, self.start, 27)
-            P.poly([(450 + slide + 34, 313), (450 + slide + 34, 341), (450 + slide + 58, 327)], WHITE, INK, 3)
-            self.button(450 + slide, 380, 380, 58, "CARA MAIN", YELLOW, self.howto, 23)
-            self.button(450 + slide, 450, 182, 52, "SUARA " + ("OFF" if sfx.MUTE else "ON"), SKY, self.toggle_snd, 18)
-            if self.has_save():
-                self.button(648 + slide, 450, 182, 52, "GAME BARU", PINK, self.newgame, 18)
-                self.button(450 + slide, 514, 380, 52, "KELUAR", GRAY, self.app.quit_app, 20)
-            else:
-                self.button(648 + slide, 450, 182, 52, "KELUAR", PINK, self.app.quit_app, 18)
-            if int(self.t * 2) % 2 == 0:
-                P.stext(640, 674, "tekan ENTER atau SPASI untuk mulai", 19, WHITE, INK, 2)
-        self.parts.draw(P)
-
-    def draw_boot(self):
-        P, t = self.P, self.t
-        P.cv.create_rectangle(0, 0, P.pw, P.ph, fill=PINK, outline="", tags="dyn")
-        for i in range(0, 14):
-            x = (i * 110 + t * 70) % 1540 - 130
-            P.line([(x, 0), (x - 320, 720)], lighten(PINK, 0.28), 4)
-        bx, by, bw, _bh = P.window(270, 130, 740, 440, "", LILAC, CREAM, "savequest.exe/loading")
-        P.stext(640, by + 62, "SAVEQUEST", 78, YELLOW, INK, 4)
-        prog = min(1.0, t / (BOOT - 0.3))
-        P.bar(bx + 60, by + 160, bw - 120, 40, prog, HOT)
-        P.text(640, by + 230, "LOADING... %d%%" % int(prog * 100), 24)
-        msgs = ["Memuat dompet...", "Memanggil boss wishlist...", "Mengasah pedang tabungan...", "Siap bertualang!"]
-        P.text(640, by + 272, msgs[min(3, int(prog * 4))], 20, "#7a6a8a")
+    def _poke_hero(self):
+        self.hop = 0.6
+        self.say = "Ayo menabung!"
+        sfx.play("star")
+        self.app.mark_dirty()
 
     def toggle_snd(self):
         sfx.toggle()
         self.app.mark_dirty()
 
     def howto(self):
-        self.app.dialog = Popup(self.app, "CARA MAIN", HOWTO, None, SKY, "SIAP!", sound="coin")
+        self.app.dialog = Popup(self.app, "CARA MAIN", HOWTO, None, SKY, "MENGERTI", sound="coin")
 
     def newgame(self):
         def ok(r):
             if r["yakin"] == 1:
                 self.app.game.reset()
-                self.app.toast("Data dihapus. Mulai dari awal!", HOT)
-        self.app.dialog = Dialog(self.app, "GAME BARU?", [dict(key="yakin", label="Hapus semua progres?", kind="choice",
-                                 choices=["Tidak, batal", "Ya, hapus semua"])], "OK", PINK, ok)
+                self.app.toast("Data direset.", PINK)
+
+        self.app.dialog = Dialog(
+            self.app, "GAME BARU?",
+            [dict(key="yakin", label="Hapus semua progres?", kind="choice", choices=["Batal", "Ya, hapus semua"])],
+            "OK", PINK, ok
+        )
 
 
-# ====================================================================== CREATOR
-CLASS_STATS = {"Star Mage": (0.3, 0.5, 0.95), "Siren Bard": (0.4, 0.75, 0.7),
-               "Riot Rogue": (0.55, 0.95, 0.4), "Fire Knight": (0.95, 0.4, 0.5)}
+CLASS_STATS = {
+    "Star Mage": (0.3, 0.5, 0.95),
+    "Siren Bard": (0.4, 0.75, 0.7),
+    "Riot Rogue": (0.55, 0.95, 0.4),
+    "Fire Knight": (0.95, 0.4, 0.5),
+}
 
 
 class CreatorScreen(Screen):
@@ -487,41 +122,48 @@ class CreatorScreen(Screen):
         for k in art.OPT:
             self.char.setdefault(k, art.DEFAULT_IDX[k])
         self.nama = g.data["nama"]
-        self.parts = Particles()
         self.cheer = 0.0
         self.shown = list(CLASS_STATS[art.opt(self.char, "kelas")[0]])
 
     def draw_static(self):
-        art.y2k_bg(self.P, "#ffb3da", "#b9a2ff", seed=8)
-        art.taskbar(self.P)
+        self.P.bgfill("#f6f7fb", tags="static")
+        self.P.rect(0, 686, 1280, 34, "#eceef6", INK, 1, tags="static")
+        self.P.text(1264, 703, "Kustomisasi Hero · Esc untuk Kembali", 14, "#6c7086", "e", tags="static")
 
     def update(self, dt):
-        self.t += dt
-        self.cheer = max(0.0, self.cheer - dt)
-        self.parts.update(dt)
+        super().update(dt)
+        if self.cheer > 0:
+            self.cheer = max(0.0, self.cheer - dt)
+            if self.cheer == 0:
+                self.app.mark_dirty()
         tgt = CLASS_STATS[art.opt(self.char, "kelas")[0]]
-        self.shown = [s + (g - s) * min(1.0, dt * 10) for s, g in zip(self.shown, tgt)]
+        if any(abs(s - g) > 0.01 for s, g in zip(self.shown, tgt)):
+            self.shown = [s + (g - s) * min(1.0, dt * 12) for s, g in zip(self.shown, tgt)]
+            self.app.mark_dirty()
 
     def change(self, key, d):
         art.cycle(self.char, key, d)
-        self.cheer = 0.9
+        self.cheer = 0.5
         sfx.play("click")
-        self.parts.spawn(728, 380, "spark", [YELLOW, WHITE, PINK, MINT], 8, 220, 110, 500, 0.7, 9)
+        self.app.mark_dirty()
 
     def randomize(self):
         self.char = art.random_char()
-        self.cheer = 1.0
+        self.cheer = 0.6
         sfx.play("coin")
-        self.parts.spawn(728, 380, "star", [YELLOW, PINK, MINT, SKY], 10, 260, 140, 500, 0.8, 10)
+        self.app.mark_dirty()
 
     def rename(self):
         def ok(r):
             self.nama = r["nama"][:14]
-        self.app.dialog = Dialog(self.app, "NAMA PAHLAWAN", [dict(key="nama", label="Nama karakter", kind="text",
-                                 value=self.nama, required=True, maxlen=14)], "SIMPAN", YELLOW, ok)
+
+        self.app.dialog = Dialog(
+            self.app, "NAMA PAHLAWAN",
+            [dict(key="nama", label="Nama karakter", kind="text", value=self.nama, required=True, maxlen=14)],
+            "SIMPAN", YELLOW, ok
+        )
 
     def back(self):
-        # Selalu kembali ke halaman sebelumnya di navigation stack
         self.app.go_back(fallback="hub" if self.app.game.data["setup_done"] else "title")
 
     def finish(self):
@@ -541,10 +183,15 @@ class CreatorScreen(Screen):
             ev = g.unlock_hero()
             self.app.goto("hub")
             self.app.show_events(ev)
-        self.app.dialog = Dialog(self.app, "PENGATURAN AWAL", [
-            dict(key="target", label="Target dana darurat", kind="money", value="5000000", hint="mis. 5000000"),
-            dict(key="saldo", label="Saldo dana darurat saat ini", kind="money", value="0", allow_zero=True)],
-            "MULAI!", MINT, ok, "Tips: dana darurat ideal 3-6x pengeluaran bulanan.")
+
+        self.app.dialog = Dialog(
+            self.app, "PENGATURAN AWAL",
+            [
+                dict(key="target", label="Target dana darurat", kind="money", value="5000000", hint="mis. 5000000"),
+                dict(key="saldo", label="Saldo dana darurat saat ini", kind="money", value="0", allow_zero=True),
+            ],
+            "MULAI!", MINT, ok, "Dana darurat ideal 3-6x pengeluaran bulanan."
+        )
 
     def on_key(self, key, _ch):
         if key == "Escape":
@@ -555,65 +202,51 @@ class CreatorScreen(Screen):
             return True
         return False
 
-    def arrow(self, x, y, d, cb):
-        P = self.P
-        self.button(x, y, 40, 44, "", YELLOW, cb)
-        hov = self.hover(x, y, 40, 44)
-        yy = y + (3 if hov and self.app.mouse_down else (-3 if hov else 0))
-        cx = x + 20
-        P.poly([(cx - 7 * d, yy + 12), (cx + 7 * d, yy + 22), (cx - 7 * d, yy + 32)], INK, INK, 2)
-
     def draw(self):
         P, ch = self.P, self.char
         self.hits = []
         cls = art.cls_info(ch)
         cname = art.opt(ch, "kelas")[0]
 
-        # ---- kiri: lemari
-        bx, by, _bw, _bh = P.window(24, 24, 500, 650, "WARDROBE.exe", PINK)
+        # Kiri: Wardrobe
+        bx, by, _bw, _bh = P.window(24, 24, 500, 646, "WARDROBE", PINK, WHITE)
         for i, (key, label) in enumerate(art.ROWS):
-            y = by + 12 + i * 62
-            P.text(bx + 16, y + 22, label, 17, INK, "w")
-            self.arrow(bx + 178, y, -1, lambda k=key: self.change(k, -1))
-            self.arrow(bx + 434, y, 1, lambda k=key: self.change(k, 1))
-            P.rect(bx + 224, y, 206, 44, WHITE, INK, 3, r=12)
+            y = by + 14 + i * 62
+            P.text(bx + 18, y + 20, label, 15, INK, "w")
+            self.button(bx + 178, y, 40, 40, "<", YELLOW, lambda k=key: self.change(k, -1), 18)
+            self.button(bx + 434, y, 40, 40, ">", YELLOW, lambda k=key: self.change(k, 1), 18)
+            P.rect(bx + 224, y, 204, 40, "#fafbfe", INK, 1.5)
             lab, val = art.opt(ch, key)
             if val.startswith("#"):
-                P.oval(bx + 246, y + 22, 12, 12, val, INK, 2.5)
-                P.text(bx + 266, y + 23, lab, 18, INK, "w")
+                P.oval(bx + 244, y + 20, 10, 10, val, INK, 1.5)
+                P.text(bx + 262, y + 20, lab, 16, INK, "w")
             else:
-                P.text(bx + 327, y + 23, lab, 18, INK)
+                P.text(bx + 326, y + 20, lab, 16, INK)
 
-        # ---- tengah: panggung
-        sx, sy, sw, sh = 548, 24, 360, 650
-        P.rect(sx, sy, sw, sh, lighten(cls["col"], 0.35), INK, 4, r=20, sh=7)
+        # Tengah: Preview Hero
+        sx, sy, sw, sh = 544, 24, 368, 646
+        P.window(sx, sy, sw, sh, "PREVIEW HERO", SKY, WHITE)
         cx = sx + sw / 2
-        P.oval(cx, 300, 142, 142, lighten(cls["col"], 0.58), "", 0)
-        P.rect(sx, sy + 560, sw, 90, INK, INK, 4, r=20)
-        P.rect(sx, sy + 560, sw, 40, INK, "", 0)
-        P.rect(sx, sy, sw, sh, "", INK, 4, r=20)
+        P.oval(cx, 300, 128, 128, "#f3f6fc", "", 0)
+        art.draw_chibi(P, cx, sy + 520, 380, ch, self.t, "cheer" if self.cheer > 0 else "idle")
+        P.rect(sx + 18, sy + 544, sw - 36, 82, "#f6f7fb", INK, 1.5)
+        P.text(sx + 32, sy + 568, f"ATTACK : {cls['atk']}", 15, INK, "w")
+        P.text(sx + 32, sy + 602, f"SPELL  : {cls['spell']}", 15, INK, "w")
 
-        art.draw_chibi(P, cx, sy + 540, 410, ch, self.t, "cheer" if self.cheer > 0 else "idle")
-        word = cls["say"][int(self.t / 2.5) % len(cls["say"])]
-        art.draw_speech(P, cx + 85, sy + 148, word, 22, WHITE)
-        P.text(sx + 22, sy + 580, "ATTACK:", 17, YELLOW, "w")
-        P.text(sx + 110, sy + 580, cls["atk"], 19, CREAM, "w")
-        P.text(sx + 22, sy + 618, "SPELL:", 17, YELLOW, "w")
-        P.text(sx + 110, sy + 618, cls["spell"], 19, CREAM, "w")
+        # Kanan: Info & Navigasi
+        rx, ry, rw, _rh = P.window(932, 24, 324, 646, "CHARACTER", LILAC, WHITE)
+        self.button(rx + 16, ry + 16, rw - 32, 46, f"{self.nama} (Ubah Nama)", YELLOW, self.rename, 17)
+        P.text(rx + 18, ry + 86, "KELAS", 14, "#6c7086", "w")
+        P.text(rx + 18, ry + 114, cname.upper(), 24, INK, "w")
+        P.text(rx + 18, ry + 154, "HP", 16, INK, "w")
+        P.hearts_row(rx + 56, ry + 148, 6, 6, 13, 4)
 
-        # ---- kanan: kartu karakter
-        rx, ry, rw, _rh = P.window(924, 24, 332, 650, "CHARACTER.exe", LILAC)
-        self.button(rx + 12, ry + 12, rw - 24, 56, self.nama + "  (ubah)", YELLOW, self.rename, 22)
-        P.text(rx + 16, ry + 100, "KELAS", 16, "#6f6580", "w")
-        P.stext(rx + rw / 2, ry + 132, cname.upper(), 30, cls["col"], INK, 3)
-        P.text(rx + 16, ry + 176, "HP", 22, INK, "w")
-        P.hearts_row(rx + 56, ry + 177, 6, 6, 15, 4)
         for i, (lab, v) in enumerate(zip(("STRENGTH", "AGILITY", "MAGIC"), self.shown)):
-            y = ry + 214 + i * 58
-            P.text(rx + 16, y, lab, 17, INK, "w")
-            P.bar(rx + 16, y + 14, rw - 32, 22, v, [HOT, MINT, SKY][i])
-        yy = ry + 400
-        self.button(rx + 12, yy, rw - 24, 54, "ACAK KARAKTER", SKY, self.randomize, 21)
-        self.button(rx + 12, yy + 68, rw - 24, 76, "SELESAI!", MINT, self.finish, 32)
-        # Tombol KEMBALI selalu tersedia agar pengguna tidak pernah terjebak
-        self.button(rx + 12, yy + 156, rw - 24, 44, "KEMBALI", GRAY, self.back, 18)
+            y = ry + 190 + i * 56
+            P.text(rx + 18, y, lab, 14, INK, "w")
+            P.bar(rx + 18, y + 12, rw - 36, 18, v, [PINK, MINT, SKY][i])
+
+        yy = ry + 382
+        self.button(rx + 16, yy, rw - 32, 46, "ACAK KARAKTER", SKY, self.randomize, 17)
+        self.button(rx + 16, yy + 60, rw - 32, 62, "SELESAI!", MINT, self.finish, 24)
+        self.button(rx + 16, yy + 136, rw - 32, 42, "KEMBALI", GRAY, self.back, 16)
